@@ -4,10 +4,10 @@ Instructions for AI agents (and humans) working in this repository.
 
 ## What This Is
 
-An **experimental research system** evolving populations of crypto trading
-agents (SOLUSDT first) through selection/reproduction/mutation. The user is
-learning while building: every milestone must be explained, tested, and
-confirmed before moving on.
+An **experimental research system** evolving populations of trading agents
+(XAUUSDT tokenized-gold perpetual first) through selection/reproduction/mutation.
+The user is learning while building: every milestone must be explained, tested,
+and confirmed before moving on.
 
 **Status:** M1 complete (market data: downloader/validator/cleaner/Parquet storage;
 SOLUSDT 1m/5m/15m/1h datasets in `data/processed/`). Next milestone: M2 (feature engine).
@@ -52,8 +52,10 @@ Full roadmap lives in the project spec; milestone table in `README.md`.
   Normalize via `schema.to_canonical_timestamps()` — pandas 3 defaults to `us`
   resolution and Parquet round-trips at `us`, so never construct datetimes ad hoc.
 - Datasets: `data/processed/{SYMBOL}_{timeframe}.parquet`, lineage in file
-  metadata (`DataStorage.read_lineage`). SOLUSDT 1m(30d)/5m(90d)/15m(180d)/1h
-  (full history from 2021-10-21).
+  metadata (`DataStorage.read_lineage`). XAUUSDT linear-perp 1m/5m/15m/1h,
+  ALL from listing 2026-03-09 (that is the exchange's entire history for the
+  instrument). Legacy SOLUSDT datasets also present.
+- XAUUSDT exists ONLY as `category=linear` (perp), never spot.
 - Re-download: `.venv\Scripts\python.exe scripts\download_data.py`
 - Explore: `.venv\Scripts\python.exe scripts\explore_data.py --timeframes 1h`
 - Gaps are warnings, never silently filled; cleaning only drops impossible rows.

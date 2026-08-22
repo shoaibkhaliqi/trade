@@ -3,11 +3,19 @@ mode: backtest
 seed: 42
 
 data:
-  symbol: SOLUSDT
+  symbol: XAUUSDT
   timeframes: ["1m", "5m", "15m", "1h"]
+  source: bybit
+  category: linear       # XAUUSDT is a USDT-perpetual (tokenized gold), not spot
   raw_dir: data/raw
   processed_dir: data/processed
   features_dir: data/features
+  # null => everything the exchange has (XAUUSDT lists 2026-03-09 on Bybit)
+  days_back:
+    "1m": null
+    "5m": null
+    "15m": null
+    "1h": null
 
 splits:
   train: null            # set at M7, e.g. ["2021-01-01", "2024-12-31"]
