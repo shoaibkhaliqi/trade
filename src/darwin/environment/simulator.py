@@ -10,6 +10,11 @@ Execution contract (pairs with M2's feature contract):
   at every instant.
 - Deterministic: no RNG anywhere. Identical inputs -> bit-identical outputs.
 
+Two ways to drive it:
+- ``run(candles, actions)`` - batch mode used by benchmarks/tests.
+- ``prepare / submit / step / result`` - interactive stepping used by the
+  Gym environment (M5+). Identical accounting, identical code paths.
+
 Documented simplifications (revisited by later milestones):
 - Equity is marked once per candle at its CLOSE (no intrabar path yet).
 - Fills are permitted during zero-volume candles (open carries prior price);
@@ -151,11 +156,54 @@ class TradingSimulator:
     def __init__(self, config: SimulatorConfig | None = None) -> None:
         self.cfg = config or SimulatorConfig()
 
+    # ------------------------------------------------------------------
+    # batch API
+    # ------------------------------------------------------------------
     def run(
         self,
         candles: pd.DataFrame,
         actions: Sequence[Action | str | None],
     ) -> SimResult:
+        acts = self._prepare(candles, actions)
+        n = len(candles)
+
+        self._advance()  # candle 0: no decision could exist before it
+        for i in range(1, n):
+            self._pending = acts[i - 1]
+            self._advance()
+        if acts[n - 1] not in (Action.HOLD, None):
+            self._n_unfilled += 1
+
+        return self._finalize()
+
+    # ------------------------------------------------------------------
+    # stepping API (interactive consumers: Gym env, future live loop)
+    # ------------------------------------------------------------------
+    def prepare(self, candles: pd.DataFrame) -> dict[str, object]:
+        """Validate data, reset internal state, process candle 0."""
+        self._prepare(candles, None)
+        return self._advance()
+
+    def submit(self, action: Action | str | None) -> None:
+        """Queue a decision made on the just-closed candle; fills next step."""
+        self._pending = Action(action) if action is not None else Action.HOLD
+
+    def step(self) -> dict[str, object]:
+        """Advance one candle: fill any pending action at its open."""
+        return self._advance()
+
+    def result(self) -> SimResult:
+        """Finalize the episode (applies close_at_end) and return artifacts."""
+        return self._finalize()
+
+    # ------------------------------------------------------------------
+    # shared internals
+    # ------------------------------------------------------------------
+    def _prepare(
+        self,
+        candles: pd.DataFrame,
+        actions: Sequence[Action | str | None] | None,
+    ) -> list[Action]:
         missing = [c for c in OHLCV_COLUMNS if c not in candles.columns]
         if missing:
             msg = f"candles frame missing columns: {missing}"
@@ -164,179 +212,173 @@ class TradingSimulator:
         if not ts.is_monotonic_increasing:
             msg = "candles must be sorted by timestamp"
             raise ValueError(msg)
-        if len(actions) != len(candles):
+
+        self._scripted: list[Action] | None = (
+            None
+            if actions is None
+            else [
+                Action(a) if a is not None else Action.HOLD for a in actions
+            ]
+        )
+        if self._scripted is not None and len(self._scripted) != len(candles):
             msg = (
-                f"need one decision per candle: {len(actions)} actions "
+                f"need one decision per candle: {len(self._scripted)} actions "
                 f"for {len(candles)} candles"
             )
             raise ValueError(msg)
-        acts = [
-            Action(a) if a is not None else Action.HOLD
-            for a in actions
-        ]
 
         cfg = self.cfg
-        fee_rate = cfg.taker_fee_pct / 100.0
-        slip = cfg.slippage_pct / 100.0
-        wallet = Wallet(cfg.initial_capital)
+        self._fee_rate = cfg.taker_fee_pct / 100.0
+        self._slip = cfg.slippage_pct / 100.0
+        self.wallet = Wallet(cfg.initial_capital)
+        self._opens = candles["open"].to_numpy(dtype="float64")
+        self._closes = candles["close"].to_numpy(dtype="float64")
+        self._timestamps = ts.to_numpy()
+        self._n = len(candles)
 
-        opens = candles["open"].to_numpy(dtype="float64")
-        closes = candles["close"].to_numpy(dtype="float64")
-        timestamps = ts.to_numpy()
-        n = len(candles)
+        self._trades: list[TradeRecord] = []
+        self._curve_rows: list[dict[str, object]] = []
+        self._pos_meta: dict[str, object] | None = None
+        self._pending: Action | None = None
+        self._decision_equity = cfg.initial_capital
+        self._realized_cum = 0.0
+        self._n_unfilled = 0
+        self._n_skipped = 0
+        self._next_trade_id = 0
+        self._i = -1
+        return self._scripted if self._scripted is not None else []
 
-        trades: list[TradeRecord] = []
-        curve_rows: list[dict[str, float]] = []
-        pos_meta: dict[str, object] | None = None  # tracks open leg for records
-        pending: Action | None = None
-        decision_equity = cfg.initial_capital  # equity known when deciding at t
-        realized_cum = 0.0
-        n_unfilled = 0
-        n_skipped = 0
-        next_trade_id = 0
+    def _advance(self) -> dict[str, object]:
+        self._i += 1
+        i = self._i
+        if self._pending is not None and self._pending != Action.HOLD:
+            self._execute(self._pending, self._opens[i], i)
+        self._pending = None
 
-        def _execute(action: Action, raw_open: float, idx: int) -> None:
-            nonlocal next_trade_id, n_skipped, pos_meta
-            if action == Action.CLOSE:
-                if wallet.has_position:
-                    px = (
-                        _sell_fill(raw_open, slip)
-                        if wallet.qty > 0
-                        else _buy_fill(raw_open, slip)
-                    )
-                    self._flatten(wallet, px, fee_rate, pos_meta, trades, idx, timestamps)
-                    pos_meta = None
-                return
-            if action == Action.LONG:
-                if wallet.qty < 0:  # flip: buy back short at the ask side
-                    px = _buy_fill(raw_open, slip)
-                    self._flatten(wallet, px, fee_rate, pos_meta, trades, idx, timestamps)
-                    pos_meta = None
-                if wallet.qty == 0:
-                    px = _buy_fill(raw_open, slip)
-                    notional = decision_equity * cfg.position_size_pct / 100.0
-                    qty = round(notional / px, cfg.qty_decimals)
-                    if qty < MIN_QTY:
-                        n_skipped += 1
-                        return
-                    entry_fee = wallet.open(direction=+1, qty=qty, price=px, fee_rate=fee_rate)
-                    pos_meta = {
-                        "direction": "long", "qty": qty, "price": px,
-                        "ts": timestamps[idx], "idx": idx, "entry_fee": entry_fee,
-                    }
-                return
-            if action == Action.SHORT:
-                if wallet.qty > 0:  # flip: sell long at the bid side
-                    px = _sell_fill(raw_open, slip)
-                    self._flatten(wallet, px, fee_rate, pos_meta, trades, idx, timestamps)
-                    pos_meta = None
-                if wallet.qty == 0:
-                    px = _sell_fill(raw_open, slip)
-                    notional = decision_equity * cfg.position_size_pct / 100.0
-                    qty = round(notional / px, cfg.qty_decimals)
-                    if qty < MIN_QTY:
-                        n_skipped += 1
-                        return
-                    entry_fee = wallet.open(direction=-1, qty=qty, price=px, fee_rate=fee_rate)
-                    pos_meta = {
-                        "direction": "short", "qty": qty, "price": px,
-                        "ts": timestamps[idx], "idx": idx, "entry_fee": entry_fee,
-                    }
-                return
-            # Action.HOLD: nothing
+        mark = self._closes[i]
+        unreal = self.wallet.unrealized(mark)
+        self._curve_rows.append(
+            {
+                TIMESTAMP_COL: self._timestamps[i],
+                "cash": self.wallet.cash,
+                "position_qty": self.wallet.qty,
+                "entry_price": self.wallet.entry,
+                "mark": mark,
+                "unrealized": unreal,
+                "realized_cum": self._realized_cum,
+                "fees_cum": self.wallet.fees_paid,
+                "equity": self.wallet.cash + unreal,
+            }
+        )
+        equity = self.wallet.cash + unreal
+        self._decision_equity = equity  # info available at close t
+        return {
+            "index": i,
+            "timestamp": self._timestamps[i],
+            "open": self._opens[i],
+            "close": mark,
+            "equity": equity,
+            "cash": self.wallet.cash,
+            "position_qty": self.wallet.qty,
+        }
 
-        closed_at_end = False
-        for i in range(n):
-            if pending is not None and pending != Action.HOLD:
-                _execute(pending, opens[i], i)
-            pending = None
-
-            mark = closes[i]
-            unreal = wallet.unrealized(mark)
-            curve_rows.append(
-                {
-                    TIMESTAMP_COL: timestamps[i],
-                    "cash": wallet.cash,
-                    "position_qty": wallet.qty,
-                    "entry_price": wallet.entry,
-                    "mark": mark,
-                    "unrealized": unreal,
-                    "realized_cum": realized_cum,
-                    "fees_cum": wallet.fees_paid,
-                    "equity": wallet.cash + unreal,
+    def _execute(self, action: Action, raw_open: float, idx: int) -> None:
+        if action == Action.CLOSE:
+            if self.wallet.has_position:
+                px = (
+                    _sell_fill(raw_open, self._slip)
+                    if self.wallet.qty > 0
+                    else _buy_fill(raw_open, self._slip)
+                )
+                self._flatten(px, idx)
+            return
+        if action == Action.LONG:
+            if self.wallet.qty < 0:  # flip: buy back short at the ask side
+                px = _buy_fill(raw_open, self._slip)
+                self._flatten(px, idx)
+            if self.wallet.qty == 0:
+                px = _buy_fill(raw_open, self._slip)
+                notional = self._decision_equity * self.cfg.position_size_pct / 100.0
+                qty = round(notional / px, self.cfg.qty_decimals)
+                if qty < MIN_QTY:
+                    self._n_skipped += 1
+                    return
+                entry_fee = self.wallet.open(direction=+1, qty=qty, price=px,
+                                             fee_rate=self._fee_rate)
+                self._pos_meta = {
+                    "direction": "long", "qty": qty, "price": px,
+                    "ts": self._timestamps[idx], "idx": idx, "entry_fee": entry_fee,
                 }
+            return
+        if action == Action.SHORT:
+            if self.wallet.qty > 0:  # flip: sell long at the bid side
+                px = _sell_fill(raw_open, self._slip)
+                self._flatten(px, idx)
+            if self.wallet.qty == 0:
+                px = _sell_fill(raw_open, self._slip)
+                notional = self._decision_equity * self.cfg.position_size_pct / 100.0
+                qty = round(notional / px, self.cfg.qty_decimals)
+                if qty < MIN_QTY:
+                    self._n_skipped += 1
+                    return
+                entry_fee = self.wallet.open(direction=-1, qty=qty, price=px,
+                                             fee_rate=self._fee_rate)
+                self._pos_meta = {
+                    "direction": "short", "qty": qty, "price": px,
+                    "ts": self._timestamps[idx], "idx": idx, "entry_fee": entry_fee,
+                }
+            return
+        # Action.HOLD: nothing to do
+
+    def _flatten(self, price: float, exit_idx: int) -> None:
+        gross, fee = self.wallet.close(price, self._fee_rate)
+        meta = self._pos_meta
+        if meta is not None:
+            total_fees = float(meta["entry_fee"]) + fee  # both legs belong to the trade
+            self._trades.append(
+                TradeRecord(
+                    trade_id=len(self._trades),
+                    direction=str(meta["direction"]),
+                    qty=float(meta["qty"]),
+                    entry_ts=meta["ts"],
+                    entry_price=float(meta["price"]),
+                    exit_ts=self._timestamps[exit_idx],
+                    exit_price=price,
+                    gross_pnl=gross,
+                    fees_paid=total_fees,
+                    net_pnl=gross - total_fees,
+                    bars_held=exit_idx - int(meta["idx"]),
+                )
             )
-            decision_equity = wallet.cash + unreal  # info available at close t
 
-            if i < n - 1:
-                pending = acts[i]
-            elif acts[i] not in (Action.HOLD, None):
-                n_unfilled += 1
-
-        if (
-            cfg.close_at_end
-            and wallet.has_position
-            and pos_meta is not None
-        ):
+    def _finalize(self) -> SimResult:
+        cfg = self.cfg
+        closed_at_end = False
+        if cfg.close_at_end and self.wallet.has_position and self._pos_meta is not None:
             px = (
-                _sell_fill(closes[-1], slip)
-                if wallet.qty > 0
-                else _buy_fill(closes[-1], slip)
+                _sell_fill(self._closes[-1], self._slip)
+                if self.wallet.qty > 0
+                else _buy_fill(self._closes[-1], self._slip)
             )
-            self._flatten(wallet, px, fee_rate, pos_meta, trades, n - 1, timestamps)
-            pos_meta = None
+            self._flatten(px, self._n - 1)
+            self._pos_meta = None
             closed_at_end = True
-            curve_rows[-1]["cash"] = wallet.cash
-            curve_rows[-1]["position_qty"] = 0.0
-            curve_rows[-1]["entry_price"] = np.nan
-            curve_rows[-1]["unrealized"] = 0.0
-            curve_rows[-1]["realized_cum"] = realized_cum
-            curve_rows[-1]["fees_cum"] = wallet.fees_paid
-            curve_rows[-1]["equity"] = wallet.cash
+            row = self._curve_rows[-1]
+            row["cash"] = self.wallet.cash
+            row["position_qty"] = 0.0
+            row["entry_price"] = np.nan
+            row["unrealized"] = 0.0
+            row["equity"] = self.wallet.cash
 
-        curve = pd.DataFrame(curve_rows)
+        curve = pd.DataFrame(self._curve_rows)
         peak = curve["equity"].cummax()
         curve["drawdown"] = curve["equity"] / peak - 1.0
 
         return SimResult(
             equity_curve=curve,
-            trades=tuple(trades),
-            n_unfilled_actions=n_unfilled,
-            n_skipped_fills=n_skipped,
+            trades=tuple(self._trades),
+            n_unfilled_actions=self._n_unfilled,
+            n_skipped_fills=self._n_skipped,
             closed_at_end=closed_at_end,
             config=cfg,
         )
-
-    @staticmethod
-    def _flatten(
-        wallet: Wallet,
-        price: float,
-        fee_rate: float,
-        pos_meta: dict[str, object] | None,
-        trades: list[TradeRecord],
-        exit_idx: int,
-        timestamps: np.ndarray,
-    ) -> None:
-        gross, fee = wallet.close(price, fee_rate)
-        if pos_meta is not None:
-            total_fees = float(pos_meta["entry_fee"]) + fee  # both legs belong to the trade
-            trades.append(
-                TradeRecord(
-                    trade_id=len(trades),
-                    direction=str(pos_meta["direction"]),
-                    qty=float(pos_meta["qty"]),  # type: ignore[arg-type]
-                    entry_ts=pos_meta["ts"],  # type: ignore[arg-type]
-                    entry_price=float(pos_meta["price"]),  # type: ignore[arg-type]
-                    exit_ts=timestamps[exit_idx],
-                    exit_price=price,
-                    gross_pnl=gross,
-                    fees_paid=total_fees,
-                    net_pnl=gross - total_fees,
-                    bars_held=exit_idx - int(pos_meta["idx"]),  # type: ignore[arg-type]
-                )
-            )
-
-
-def actions_from_labels(labels: Sequence[str]) -> list[Action]:
-    """Convenience: ['hold','long',...] -> [Action.HOLD, ...]."""
-    return [Action(lbl) for lbl in labels]

@@ -1,5 +1,6 @@
-"""Exports for the trading environment layer (M3)."""
+"""Exports for the trading environment layer (M3+)."""
 
+from darwin.environment.env import TradingEnv, action_to_signal
 from darwin.environment.simulator import (
     MIN_QTY,
     Action,
@@ -8,7 +9,6 @@ from darwin.environment.simulator import (
     TradeRecord,
     TradingSimulator,
     Wallet,
-    actions_from_labels,
 )
 
 __all__ = [
@@ -17,7 +17,9 @@ __all__ = [
     "SimResult",
     "SimulatorConfig",
     "TradeRecord",
+    "TradingEnv",
     "TradingSimulator",
     "Wallet",
-    "actions_from_labels",
+    "action_to_signal",
 ]
+

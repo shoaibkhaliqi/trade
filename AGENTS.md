@@ -9,8 +9,29 @@ An **experimental research system** evolving populations of trading agents
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** M4 complete (benchmarks + metrics). Next milestone: M5 (single AI agent,
-requires installing the `[ml]` extra with CUDA torch).
+**Status:** M5 complete (PPO/MLP agent trained in Gym env, evaluated vs benchmarks,
+experiment logged). Next milestone: M6 (risk engine).
+
+## RL Environment Facts (M5)
+
+- `TradingEnv(candles, features, config, start_idx, end_idx)` wraps the
+  stepping simulator. Obs = 27 features (NaN->0 post-warmup) +
+  [position_sign, unrealized/equity, drawdown] float32. Action Discrete(4)
+  -> Action via `action_to_signal`. Reward = log(equity ratio); final step
+  includes close_at_end liquidation costs; equity<=0 => -10 guard.
+- Simulator has public stepping API (`prepare/submit/step/result`) -
+  batch `run()` is a thin wrapper over identical internals (102 tests
+  stayed green through that refactor).
+- Protocol: chronological 70/15/15 TRAIN/VAL/TEST. Training sees TRAIN only;
+  EvalCallback uses a recent-VAL proxy window (~3000 rows); TEST touched ONCE
+  at the end by agent AND benchmarks under identical costs.
+- Training script: scripts/train_agent.py -> saves SB3 zip under
+  experiments/runs/, logs experiment id to experiments/metadata.sqlite.
+- FIRST RESULT (seed 42, 40960 steps): agent = "hold something long" clone of
+  buy&hold, slightly worse (-0.92% vs +0.84% on TEST). Verdict per our bar:
+  NOISE, not skill. Also noted: SB3 warns MLP-PPO trains FASTER on CPU
+  (~175 fps here); revisit device choice per experiment.
+
 Full roadmap lives in the project spec; milestone table in `README.md`.
 
 ## Hard Rules
