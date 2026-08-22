@@ -40,9 +40,9 @@ Full roadmap lives in the project spec; milestone table in `README.md`.
 
 - Python 3.12 venv at `.venv` (created via uv). Always use
   `.venv\Scripts\python.exe` — never the global interpreter.
-- GPU: GTX 1660 Ti 6GB. ML stack (torch/gymnasium/SB3/optuna) is deferred to
-  M5 via the `[ml]` extra; install then with CUDA-enabled torch if benchmarks
-  justify it.
+- GPU: GTX 1660 Ti 6GB. ML stack INSTALLED: torch 2.13.0+cu130 (local wheel,
+  sha256-verified), gymnasium 1.3, stable-baselines3 2.9, optuna 4.9.
+  CUDA confirmed working (device visible, matmul OK).
 - Windows / PowerShell environment. Use `py -V:3.12` only for bootstrapping.
 
 ## Data Layer Facts (M1)
