@@ -1,0 +1,29 @@
+# PAPER TRADING profile: live market data, simulated fills, zero real-money capability.
+# This profile must NEVER be able to submit orders to a live account (enforced from M18).
+mode: paper
+paper_trading: true      # hard flag; execution layer refuses to start without it
+live_trading: false      # must remain false; flipping it requires explicit human approval
+seed: 42
+
+exchange:
+  name: bybit
+  testnet: true          # paper trading runs against testnet/public endpoints only
+
+data:
+  symbol: SOLUSDT
+  timeframe: "1m"
+
+simulator:
+  initial_capital: 1000.0
+  taker_fee_pct: 0.055
+  slippage_pct: 0.02
+  fixed_position_size_pct: 25.0
+
+risk:
+  max_position_size_pct: 50.0
+  max_leverage: 1.0
+  max_daily_loss_pct: 5.0
+  emergency_stop_loss_pct: 10.0
+
+experiment:
+  sqlite_path: experiments/paper_metadata.sqlite

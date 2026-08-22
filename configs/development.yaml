@@ -1,0 +1,24 @@
+# Daily-driver profile: fast iteration, small samples, verbose checks.
+mode: development
+seed: 42
+
+data:
+  symbol: SOLUSDT
+  timeframes: ["1m", "5m", "15m", "1h"]
+  raw_dir: data/raw
+  processed_dir: data/processed
+  features_dir: data/features
+
+simulator:
+  initial_capital: 1000.0
+  taker_fee_pct: 0.055   # percent per side; Bybit futures taker fee as reference
+  slippage_pct: 0.02     # percent per side; conservative assumption
+  fixed_position_size_pct: 25.0
+
+risk:
+  max_position_size_pct: 50.0
+  max_leverage: 1.0
+  max_daily_loss_pct: 5.0
+
+experiment:
+  sqlite_path: experiments/metadata.sqlite

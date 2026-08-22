@@ -1,0 +1,43 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# --- Tooling caches ---
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Environment / secrets ---
+.env
+.env.*
+*.key
+secrets*.yaml
+api_keys*
+
+# --- Data: datasets are reproducible from downloads, never commit them ---
+data/raw/*
+data/processed/*
+data/features/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/features/.gitkeep
+*.parquet
+*.feather
+*.h5
+
+# --- Experiment artifacts ---
+experiments/*.sqlite
+experiments/runs/
+notebooks/.ipynb_checkpoints/
+
+# --- OS / IDE ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

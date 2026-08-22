@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "darwin-trading-lab"
+version = "0.1.0"
+description = "Experimental evolutionary cryptocurrency trading research lab"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Darwin Lab" }]
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "pyarrow>=16.0",
+    "PyYAML>=6.0",
+    "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+# Heavy ML stack deferred to M5 (first AI agent); install with: uv pip install -e ".[ml]"
+ml = [
+    "torch>=2.4",
+    "gymnasium>=0.29",
+    "stable-baselines3>=2.3",
+    "optuna>=3.6",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/darwin"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort (import order)
+    "B",   # bugbear (common bugs)
+    "UP",  # pyupgrade (modern syntax)
+]
+ignore = [
+    "E501", # long lines allowed in research code where tables/URLs demand it
+]
+
+[tool.ruff.lint.per-file-ignores]
+"notebooks/*" = ["E402"] # notebooks execute cells out of order by nature
