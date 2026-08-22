@@ -30,7 +30,7 @@ Market Data → Feature Engine → Simulator ← Agent → Risk Manager → Exec
 | M1 | Market data            | ✅     |
 | M2 | Feature engine         | ✅     |
 | M3 | Trading simulator      | ✅     |
-| M4 | Benchmark strategies   | ⬜     |
+| M4 | Benchmark strategies   | ✅     |
 | M5 | Single AI agent        | ⬜     |
 | M6 | Risk engine            | ⬜     |
 | M7 | Proper validation      | ⬜     |

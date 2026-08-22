@@ -9,8 +9,8 @@ An **experimental research system** evolving populations of trading agents
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** M2 complete (feature engine: 27 deterministic shift-safe features,
-no-look-ahead guard tests). Next milestone: M3 (trading simulator).
+**Status:** M4 complete (benchmarks + metrics). Next milestone: M5 (single AI agent,
+requires installing the `[ml]` extra with CUDA torch).
 Full roadmap lives in the project spec; milestone table in `README.md`.
 
 ## Hard Rules
@@ -86,6 +86,23 @@ Full roadmap lives in the project spec; milestone table in `README.md`.
   then cost -14.6% equity). M6 risk engine MUST bound drifting exposure.
 - Zero-volume candles: fills currently allowed at carried-forward opens -
   documented assumption, revisit before paper trading.
+
+## Benchmark Facts (M4)
+
+- Strategies (`agents/strategies.py`) ALL call FeatureEngine for indicators -
+  no duplicated math. Interface: `generate_actions(ohlcv) -> list[Action]`,
+  one decision per candle, filled at next open by the simulator.
+- `default_benchmarks()`: buy_and_hold, random(seed), ema_cross(5,20),
+  rsi_reversion(30/70), vwap_reversion(0.004). Deterministic per parameters.
+- MetricsReport (`evaluation/metrics.py`): total_return, max_drawdown, sharpe,
+  sortino, profit_factor, win_rate, n_trades, fees_paid, avg_trade_net,
+  exposure. Sharpe/Sortino report 0.0 when their denominator is zero
+  (documented convention); profit_factor is NaN with no trades.
+- EMPIRICAL BASELINE (PAXGUSDT 1h full history, development config): ONLY
+  buy&hold is positive (+34%, one trade); every active strategy loses - fee
+  drag dominates naive signals (random: -$672 fees on $1k capital). A future
+  agent must beat buy_and_hold AFTER costs or it is noise.
+- Comparison runner: scripts/run_benchmarks.py --timeframe X [--bars N]
 
 ## Conventions
 
