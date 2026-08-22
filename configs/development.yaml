@@ -3,10 +3,10 @@ mode: development
 seed: 42
 
 data:
-  symbol: XAUUSDT
+  symbol: PAXGUSDT
   timeframes: ["1m", "5m", "15m", "1h"]
   source: bybit          # exchange whose public REST API we download from
-  category: linear         # XAUUSDT is a USDT-perpetual (tokenized gold), not spot
+  category: linear         # PAXGUSDT perp = tokenized gold (1 token = 1 ozt, redeemable via Paxos)
   raw_dir: data/raw
   processed_dir: data/processed
   features_dir: data/features

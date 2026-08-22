@@ -34,6 +34,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="override the configured history window for all timeframes",
     )
+    parser.add_argument(
+        "--sleep-s",
+        type=float,
+        default=None,
+        help="override delay between API pages (rate-limit tuning)",
+    )
     return parser.parse_args()
 
 
@@ -63,7 +69,7 @@ def main() -> int:
     downloader = DataDownloader(
         category=data_cfg.get("category", "spot"),
         page_limit=dl_cfg.get("page_limit", 1000),
-        sleep_s=dl_cfg.get("sleep_s", 0.15),
+        sleep_s=args.sleep_s if args.sleep_s is not None else dl_cfg.get("sleep_s", 0.15),
     )
     validator = DataValidator()
     cleaner = DataCleaner()

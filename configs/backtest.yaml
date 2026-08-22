@@ -3,10 +3,10 @@ mode: backtest
 seed: 42
 
 data:
-  symbol: XAUUSDT
+  symbol: PAXGUSDT
   timeframes: ["1m", "5m", "15m", "1h"]
   source: bybit
-  category: linear       # XAUUSDT is a USDT-perpetual (tokenized gold), not spot
+  category: linear       # PAXGUSDT is a USDT-perpetual (tokenized gold; spot pair was delisted 2025-03), not spot
   raw_dir: data/raw
   processed_dir: data/processed
   features_dir: data/features

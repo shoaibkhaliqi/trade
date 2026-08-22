@@ -40,7 +40,7 @@ def test_configs_load_and_have_required_keys(config_name: str) -> None:
     assert isinstance(cfg, dict)
     for key in ("mode", "seed", "data", "simulator"):
         assert key in cfg, f"config '{config_name}' missing required key '{key}'"
-    assert cfg["data"]["symbol"] == "SOLUSDT"
+    assert cfg["data"]["symbol"] == "PAXGUSDT"
 
 
 def test_paper_config_cannot_trade_live() -> None:

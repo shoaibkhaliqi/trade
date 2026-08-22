@@ -10,7 +10,7 @@ exchange:
   testnet: true          # paper trading runs against testnet/public endpoints only
 
 data:
-  symbol: XAUUSDT
+  symbol: PAXGUSDT
   timeframe: "1m"
 
 simulator:

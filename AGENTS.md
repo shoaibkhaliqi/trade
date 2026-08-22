@@ -5,12 +5,12 @@ Instructions for AI agents (and humans) working in this repository.
 ## What This Is
 
 An **experimental research system** evolving populations of trading agents
-(XAUUSDT tokenized-gold perpetual first) through selection/reproduction/mutation.
+(PAXGUSDT tokenized-gold perpetual first) through selection/reproduction/mutation.
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** M1 complete (market data: downloader/validator/cleaner/Parquet storage;
-SOLUSDT 1m/5m/15m/1h datasets in `data/processed/`). Next milestone: M2 (feature engine).
+**Status:** M2 complete (feature engine: 27 deterministic shift-safe features,
+no-look-ahead guard tests). Next milestone: M3 (trading simulator).
 Full roadmap lives in the project spec; milestone table in `README.md`.
 
 ## Hard Rules
@@ -51,11 +51,18 @@ Full roadmap lives in the project spec; milestone table in `README.md`.
   candle OPEN time, tz-aware UTC ns; prices/volume float64; sorted unique.
   Normalize via `schema.to_canonical_timestamps()` — pandas 3 defaults to `us`
   resolution and Parquet round-trips at `us`, so never construct datetimes ad hoc.
-- Datasets: `data/processed/{SYMBOL}_{timeframe}.parquet`, lineage in file
-  metadata (`DataStorage.read_lineage`). XAUUSDT linear-perp 1m/5m/15m/1h,
-  ALL from listing 2026-03-09 (that is the exchange's entire history for the
-  instrument). Legacy SOLUSDT datasets also present.
-- XAUUSDT exists ONLY as `category=linear` (perp), never spot.
+- Primary pair: PAXGUSDT linear-perp (tokenized gold, 1 token = 1 troy oz),
+  listed 2022-03-15; FULL history stored: 1m 2.33M / 5m 467k / 15m 156k /
+  1h 38.9k candles. Its Bybit SPOT pair died 2025-03 - perp is the only feed.
+- Legacy datasets also present: XAUUSDT perp (from 2026-03-09), SOLUSDT spot.
+- Features: `data/features/{SYMBOL}_{tf}.parquet` via scripts/build_features.py;
+  FeatureEngine v1 = 27 features (schema.py registry). Contract: row t uses
+  only candles <= t (closed-candle convention); execution happens next-open
+  from M3; warmup rows are NaN by design; guards: truncation-invariance +
+  future-perturbation tests in test_features.py - new features MUST pass both.
+- Zero-volume candles are REAL market facts (PAXG 1m: 41.6% of history,
+  mostly 2022-24): they produce NaN vol_change/vwap_dist/rel_vol_20.
+  Never fabricate fills; masking/dropping is an explicit downstream decision.
 - Re-download: `.venv\Scripts\python.exe scripts\download_data.py`
 - Explore: `.venv\Scripts\python.exe scripts\explore_data.py --timeframes 1h`
 - Gaps are warnings, never silently filled; cleaning only drops impossible rows.

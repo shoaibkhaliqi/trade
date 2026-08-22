@@ -34,8 +34,11 @@ class DataStorage:
         symbol: str,
         timeframe: str,
         metadata: dict[str, Any] | None = None,
+        *,
+        required_columns: list[str] | None = None,
     ) -> Path:
-        missing = [c for c in OHLCV_COLUMNS if c not in df.columns]
+        req = OHLCV_COLUMNS if required_columns is None else required_columns
+        missing = [c for c in req if c not in df.columns]
         if missing:
             msg = f"refusing to save: missing columns {missing}"
             raise ValueError(msg)
@@ -57,7 +60,7 @@ class DataStorage:
             f"darwin.{k}": json.dumps(v, default=str) for k, v in meta.items()
         }
 
-        table = pa.Table.from_pandas(df[OHLCV_COLUMNS], preserve_index=False)
+        table = pa.Table.from_pandas(df, preserve_index=False)
         table = table.replace_schema_metadata(
             {**table.schema.metadata, **{k.encode(): v.encode() for k, v in arrow_meta.items()}}
         )
