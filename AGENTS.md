@@ -9,7 +9,8 @@ agents (SOLUSDT first) through selection/reproduction/mutation. The user is
 learning while building: every milestone must be explained, tested, and
 confirmed before moving on.
 
-**Status:** M0 complete (project setup). Next milestone: M1 (market data).
+**Status:** M1 complete (market data: downloader/validator/cleaner/Parquet storage;
+SOLUSDT 1m/5m/15m/1h datasets in `data/processed/`). Next milestone: M2 (feature engine).
 Full roadmap lives in the project spec; milestone table in `README.md`.
 
 ## Hard Rules
@@ -43,6 +44,19 @@ Full roadmap lives in the project spec; milestone table in `README.md`.
   M5 via the `[ml]` extra; install then with CUDA-enabled torch if benchmarks
   justify it.
 - Windows / PowerShell environment. Use `py -V:3.12` only for bootstrapping.
+
+## Data Layer Facts (M1)
+
+- Canonical schema: columns `timestamp,open,high,low,close,volume`; timestamp =
+  candle OPEN time, tz-aware UTC ns; prices/volume float64; sorted unique.
+  Normalize via `schema.to_canonical_timestamps()` — pandas 3 defaults to `us`
+  resolution and Parquet round-trips at `us`, so never construct datetimes ad hoc.
+- Datasets: `data/processed/{SYMBOL}_{timeframe}.parquet`, lineage in file
+  metadata (`DataStorage.read_lineage`). SOLUSDT 1m(30d)/5m(90d)/15m(180d)/1h
+  (full history from 2021-10-21).
+- Re-download: `.venv\Scripts\python.exe scripts\download_data.py`
+- Explore: `.venv\Scripts\python.exe scripts\explore_data.py --timeframes 1h`
+- Gaps are warnings, never silently filled; cleaning only drops impossible rows.
 
 ## Conventions
 

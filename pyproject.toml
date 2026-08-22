@@ -16,6 +16,7 @@ dependencies = [
     "pyarrow>=16.0",
     "PyYAML>=6.0",
     "matplotlib>=3.8",
+    "requests>=2.31", # HTTP client for exchange REST APIs (M1 data, M18/M20 execution)
 ]
 
 [project.optional-dependencies]

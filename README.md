@@ -27,7 +27,7 @@ Market Data → Feature Engine → Simulator ← Agent → Risk Manager → Exec
 | #  | Milestone              | Status |
 |----|------------------------|--------|
 | M0 | Project setup          | ✅     |
-| M1 | Market data            | ⬜     |
+| M1 | Market data            | ✅     |
 | M2 | Feature engine         | ⬜     |
 | M3 | Trading simulator      | ⬜     |
 | M4 | Benchmark strategies   | ⬜     |

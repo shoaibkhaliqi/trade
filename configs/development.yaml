@@ -5,9 +5,21 @@ seed: 42
 data:
   symbol: SOLUSDT
   timeframes: ["1m", "5m", "15m", "1h"]
+  source: bybit          # exchange whose public REST API we download from
+  category: spot         # spot market for M1 (perpetual futures can be added later)
   raw_dir: data/raw
   processed_dir: data/processed
   features_dir: data/features
+  # How much history per timeframe. null => everything the exchange has.
+  days_back:
+    "1m": 30
+    "5m": 90
+    "15m": 180
+    "1h": null
+
+download:
+  sleep_s: 0.15          # polite rate limiting between API pages
+  page_limit: 1000       # Bybit max klines per request
 
 simulator:
   initial_capital: 1000.0
