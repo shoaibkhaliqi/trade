@@ -67,6 +67,26 @@ Full roadmap lives in the project spec; milestone table in `README.md`.
 - Explore: `.venv\Scripts\python.exe scripts\explore_data.py --timeframes 1h`
 - Gaps are warnings, never silently filled; cleaning only drops impossible rows.
 
+## Simulator Facts (M3)
+
+- API: `TradingSimulator(cfg).run(ohlcv_df, actions) -> SimResult`
+  (`equity_curve` df, `trades`, unfilled/skipped counters, config echo).
+- Contract: `actions[i]` is decided AFTER candle i closes -> fills at candle
+  i+1 OPEN; buys fill at open*(1+slip), sells at open*(1-slip); taker fee on
+  fill notional, BOTH legs recorded per trade. Queue design makes look-ahead
+  fills structurally impossible.
+- Accounting: linear-USDT-perp style; opening moves only the fee;
+  `equity == cash + unrealized` holds every row (tested).
+- Sizing: fixed % of DECISION-time equity, qty rounded 8dp, fills below
+  MIN_QTY=1e-8 skipped+counted. LONG/SHORT while positioned same-way = no-op;
+  opposite = flip (close+open same fill event). close_at_end=True default
+  liquidates at last CLOSE for fair comparison.
+- KNOWN BEHAVIOR: fixed-at-entry sizing lets exposure drift with PnL
+  (demo: 25% at entry became 49% at the Jan-2026 peak; -29.7% gold correction
+  then cost -14.6% equity). M6 risk engine MUST bound drifting exposure.
+- Zero-volume candles: fills currently allowed at carried-forward opens -
+  documented assumption, revisit before paper trading.
+
 ## Conventions
 
 - Layout: src-layout (`src/darwin/...`), package editable-installed.
