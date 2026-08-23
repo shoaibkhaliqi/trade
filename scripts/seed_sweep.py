@@ -47,7 +47,7 @@ def main() -> int:
           f"| {symbol} {args.timeframe} | test rows={n - val_end}")
     results: list[tuple[int, MetricsReport]] = []
     for seed in args.seeds:
-        _path, report = train_and_evaluate(
+        _path, report, _behavior = train_and_evaluate(
             seed=seed, ohlcv=ohlcv, feats=feats,
             timeframe=args.timeframe,
             sim_cfg=sim_cfg, risk_cfg=risk_cfg,

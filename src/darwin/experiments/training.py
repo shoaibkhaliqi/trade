@@ -102,8 +102,10 @@ def train_and_evaluate(
     genome: Genome | None = None,
     score_window_bars: int | None = None,
     init_from_model_path: str | None = None,
-) -> tuple[str, MetricsReport]:
+) -> tuple[str, MetricsReport, dict]:
     """Train on [0, train_end), validate near VAL tail, score once on TEST.
+
+    Returns (model_path, report, behavior fingerprint).
 
     When ``genome`` is provided it overrides stop/TP/cooldown/trade-cap in the
     risk layer and PPO learning genes; entry sizing uses its position gene.
@@ -185,12 +187,12 @@ def train_and_evaluate(
         keep = min(score_window_bars, len(test_candles))
         test_candles = test_candles.iloc[:keep].reset_index(drop=True)
         test_feats = test_feats.iloc[:keep].reset_index(drop=True)
-    report = evaluate_agent_on_test(
+    report, behavior = evaluate_agent_on_test(
         model_path, test_candles, test_feats,
         sim_cfg=episode_sim_cfg, risk_cfg=effective_risk,
         seed=seed, timeframe=timeframe,
     )
-    return f"{model_path}.zip", report
+    return f"{model_path}.zip", report, behavior
 
 
 def evaluate_agent_on_test(
@@ -202,16 +204,29 @@ def evaluate_agent_on_test(
     risk_cfg: RiskConfig,
     seed: int,
     timeframe: str,
-) -> MetricsReport:
-    """One deterministic pass over TEST - the only scoring that counts."""
+) -> tuple[MetricsReport, dict]:
+    """One deterministic pass over TEST - the only scoring that counts.
+
+    Returns (report, behavior): behavior is the agent's position-state
+    fingerprint (see evolution.behavior) - captured here because the episode
+    is already being stepped; measuring behavior costs nothing extra.
+    """
+    from darwin.evolution.behavior import summarize_behavior
+
     model = PPO.load(model_path, device="cpu")
     env = TradingEnv(test_candles, test_feats, config=sim_cfg,
                      risk=RiskManager(risk_cfg))
     obs, _ = env.reset(seed=seed)
+    actions: list[int] = []
+    positions: list[float] = []
     done = False
     while not done:
         action, _ = model.predict(obs, deterministic=True)
-        obs, _, terminated, truncated, _ = env.step(int(action))
+        actions.append(int(action))
+        obs, _, terminated, truncated, info = env.step(int(action))
         done = terminated or truncated
+        positions.append(float(info["position_qty"]))
     assert env.last_result is not None
-    return MetricsReport.from_result(env.last_result, timeframe)
+    report = MetricsReport.from_result(env.last_result, timeframe)
+    behavior = summarize_behavior(actions, positions)
+    return report, behavior

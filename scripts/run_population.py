@@ -97,10 +97,12 @@ def main() -> int:
               f"({time.time() - t0:.0f}s)")
 
     # ------------------------------------------------------------------
-    # leaderboard: read back from DB - the roster, not local memory, is truth
+    # leaderboard: THIS run's cohort only - the DB accumulates rosters
     # ------------------------------------------------------------------
+    cohort_ids = {a.agent_id for a in agents}
     rows = [r for r in get_agents(db_path=pop.db_path)
-            if r["metrics"] and "fitness" in r["metrics"]]
+            if r["agent_id"] in cohort_ids
+            and r["metrics"] and "fitness" in r["metrics"]]
     rows.sort(key=lambda r: r["metrics"]["fitness"], reverse=True)
 
     print(f"\n=== LEADERBOARD (by fitness: {args.fitness}) ===")

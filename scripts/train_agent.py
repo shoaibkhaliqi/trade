@@ -50,7 +50,7 @@ def main() -> int:
     sim_cfg = sim_config_from_yaml(cfg)
     risk_cfg = RiskConfig(**cfg["risk"])
 
-    model_path, agent_report = train_and_evaluate(
+    model_path, agent_report, _behavior = train_and_evaluate(
         seed=args.seed,
         ohlcv=ohlcv,
         feats=feats,

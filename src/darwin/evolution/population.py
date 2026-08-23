@@ -113,9 +113,10 @@ class Population:
         """Train, score, and record one agent. Returns (report, metrics, verdict).
 
         The single funnel every agent - founder or child - passes through, so
-        selection never compares apples to oranges.
+        selection never compares apples to oranges. Behavior fingerprint is
+        folded into the persisted metrics (zero extra compute).
         """
-        model_path, report = train_and_evaluate(
+        model_path, report, behavior = train_and_evaluate(
             seed=agent.seed,
             ohlcv=ohlcv,
             feats=feats,
@@ -136,6 +137,7 @@ class Population:
             {**metrics, "initial_capital_proxy": sim_cfg.initial_capital},
             fitness_cfg,
         ).total
+        metrics["behavior"] = behavior
         verdict = evaluate_survival(metrics, metrics["fitness"], survival_cfg)
         self.record_result(agent.agent_id, metrics=metrics, model_path=model_path)
         from darwin.experiments.tracker import mark_agent_status
