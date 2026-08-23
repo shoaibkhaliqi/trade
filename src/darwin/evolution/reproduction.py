@@ -34,6 +34,11 @@ class ReproductionConfig:
     offspring_per_rank: tuple[int, ...] = (2, 1, 1)
     mutation_rate: float = 0.35
     mutation_intensity: float = 0.25
+    # diversity policy (M13): decay exploration pressure over generations but
+    # never below the floor; inject fresh random genomes every generation
+    intensity_decay: float = 1.0      # 1.0 = constant intensity
+    min_intensity: float = 0.05
+    immigrants_per_generation: int = 1
 
     def __post_init__(self) -> None:
         if any(n < 0 for n in self.offspring_per_rank):
@@ -48,6 +53,21 @@ class ReproductionConfig:
         if self.mutation_intensity < 0:
             msg = "mutation_intensity must be >= 0"
             raise ValueError(msg)
+        if not 0 < self.intensity_decay <= 1:
+            msg = "intensity_decay must be within (0, 1]"
+            raise ValueError(msg)
+        if not 0 < self.min_intensity <= self.mutation_intensity:
+            msg = "min_intensity must be within (0, mutation_intensity]"
+            raise ValueError(msg)
+        if self.immigrants_per_generation < 0:
+            msg = "immigrants_per_generation must be >= 0"
+            raise ValueError(msg)
+
+
+def effective_intensity(cfg: ReproductionConfig, generation: int) -> float:
+    """Mutation pressure for a generation: decays, floored, never zero."""
+    decayed = cfg.mutation_intensity * (cfg.intensity_decay**generation)
+    return max(cfg.min_intensity, decayed)
 
 
 def select_parents(
@@ -83,8 +103,9 @@ def reproduce(
     generation: int,
     master_seed: int,
 ) -> list[AgentSpec]:
-    """Create and persist all children; returns their AgentSpecs."""
+    """Create and persist all children (bred + immigrant); returns AgentSpecs."""
     children: list[AgentSpec] = []
+    intensity = effective_intensity(cfg, generation)
     for parent_row, n_children in parents:
         parent_genome_row = _parent_genome(population, parent_row)
         parent = Genome(
@@ -92,34 +113,65 @@ def reproduce(
             genome_id=parent_row["genome_id"],
         )
         for _ in range(n_children):
-            genome_id = uuid.uuid4().hex[:10]
-            child_genome = parent.mutate(
-                rng,
-                rate=cfg.mutation_rate,
-                intensity=cfg.mutation_intensity,
-                genome_id=genome_id,
-                generation=generation,
+            children.append(
+                _make_child(
+                    population, parent.mutate(
+                        rng,
+                        rate=cfg.mutation_rate,
+                        intensity=intensity,
+                        genome_id=uuid.uuid4().hex[:10],
+                        generation=generation,
+                    ),
+                    rng, generation, master_seed, len(children),
+                )
             )
-            record_genome(
-                child_genome.values,
-                genome_id=genome_id,
-                parent_id=child_genome.parent_id,
-                generation=generation,
-                mutations=[m.__dict__ for m in child_genome.mutations],
-                db_path=population.db_path,
-            )
-            agent_id = f"a{master_seed:05d}-g{generation:02d}-{len(children):03d}"
-            seed = int(rng.integers(0, 2**31 - 1))
-            record_agent(
-                agent_id,
-                genome_id=genome_id,
-                seed=seed,
-                generation=generation,
-                db_path=population.db_path,
-            )
-            children.append(AgentSpec(agent_id=agent_id, genome=child_genome,
-                                      seed=seed, generation=generation))
+
+    # fresh blood: random immigrants with no parent - the anti-inbreeding
+    # workhorse; they reseed exploration wherever the family tree thinned
+    for _ in range(cfg.immigrants_per_generation):
+        genome_id = uuid.uuid4().hex[:10]
+        immigrant = Genome.random(rng, genome_id=genome_id)
+        # Genome.random has no generation field; rebuild with lineage metadata
+        immigrant = Genome(
+            values=immigrant.values,
+            genome_id=genome_id,
+            parent_id=None,
+            generation=generation,
+        )
+        children.append(
+            _make_child(population, immigrant, rng, generation, master_seed,
+                        len(children))
+        )
     return children
+
+
+def _make_child(
+    population: Population,
+    genome: Genome,
+    rng: np.random.Generator,
+    generation: int,
+    master_seed: int,
+    index: int,
+) -> AgentSpec:
+    record_genome(
+        genome.values,
+        genome_id=genome.genome_id,
+        parent_id=genome.parent_id,
+        generation=generation,
+        mutations=[m.__dict__ for m in genome.mutations],
+        db_path=population.db_path,
+    )
+    agent_id = f"a{master_seed:05d}-g{generation:02d}-{index:03d}"
+    seed = int(rng.integers(0, 2**31 - 1))
+    record_agent(
+        agent_id,
+        genome_id=genome.genome_id,
+        seed=seed,
+        generation=generation,
+        db_path=population.db_path,
+    )
+    return AgentSpec(agent_id=agent_id, genome=genome, seed=seed,
+                     generation=generation)
 
 
 def _parent_genome(population: Population, parent_row: dict) -> dict[str, Any]:

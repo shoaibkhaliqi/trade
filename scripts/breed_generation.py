@@ -41,6 +41,10 @@ def parse_args() -> argparse.Namespace:
                         help="children fine-tune the parent's trained policy")
     parser.add_argument("--no-train-children", action="store_true",
                         help="only create children; skip their evaluation")
+    parser.add_argument("--immigrants", type=int, default=1,
+                        help="fresh random genomes injected this generation")
+    parser.add_argument("--intensity-decay", type=float, default=1.0,
+                        help="per-generation multiplier on mutation intensity")
     return parser.parse_args()
 
 
@@ -76,6 +80,8 @@ def main() -> int:
         offspring_per_rank=tuple(args.offspring_per_rank),
         mutation_rate=args.mutation_rate,
         mutation_intensity=args.mutation_intensity,
+        intensity_decay=args.intensity_decay,
+        immigrants_per_generation=args.immigrants,
     )
     parents = select_parents(rows, rcfg)
     print(f"generation {current_gen} -> {next_gen} | fitness={args.fitness} "
@@ -87,8 +93,25 @@ def main() -> int:
 
     rng = np.random.default_rng(args.master_seed + next_gen)
     pop = Population(size=2, db_path="experiments/metadata.sqlite")
+
+    from darwin.evolution.diversity import format_diversity, population_diversity
+    from darwin.experiments.tracker import get_genome
+
+    roster_genomes = [
+        get_genome(r["genome_id"], db_path=pop.db_path)["values"]
+        for r in rows
+        if get_genome(r["genome_id"], db_path=pop.db_path)
+    ]
+    print("\ndiversity BEFORE breeding:")
+    print(format_diversity(population_diversity(roster_genomes)))
+
     children = reproduce(pop, parents, rng, rcfg,
                          generation=next_gen, master_seed=args.master_seed)
+
+    after_genomes = roster_genomes + [c.genome.values for c in children]
+    print(f"\ndiversity AFTER breeding (+{len(children)} children, "
+          f"{rcfg.immigrants_per_generation} immigrant(s)):")
+    print(format_diversity(population_diversity(after_genomes)))
 
     print("\nbirth records:")
     for m in summarize_mutations(children):

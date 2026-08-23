@@ -79,7 +79,8 @@ class TestReproduce:
 
     def test_children_created_with_lineage(self, setup) -> None:
         pop, agents, rows = setup
-        cfg = ReproductionConfig(offspring_per_rank=(2, 1))
+        cfg = ReproductionConfig(offspring_per_rank=(2, 1),
+                                 immigrants_per_generation=0)
         parents = select_parents(rows, cfg)
 
         children = reproduce(pop, parents, np.random.default_rng(7), cfg,
@@ -100,7 +101,8 @@ class TestReproduce:
     def test_children_within_bounds_and_persisted(self, setup, tmp_path) -> None:
         pop, agents, rows = setup
         cfg = ReproductionConfig(offspring_per_rank=(1,), mutation_rate=1.0,
-                                 mutation_intensity=0.4)
+                                 mutation_intensity=0.4,
+                                 immigrants_per_generation=0)
         children = reproduce(pop, select_parents(rows, cfg),
                              np.random.default_rng(3), cfg,
                              generation=1, master_seed=42)
@@ -117,6 +119,27 @@ class TestReproduce:
             assert g["generation"] == 1
             assert g["parent_id"] == agents[0].genome.genome_id
             assert len(g["mutations"]) >= 1  # rate=1.0 mutated every gene
+
+    def test_immigrants_have_no_parent_and_are_persisted(self, setup, tmp_path) -> None:
+        pop, agents, rows = setup
+        cfg = ReproductionConfig(offspring_per_rank=(1,),
+                                 immigrants_per_generation=2)
+        children = reproduce(pop, select_parents(rows, cfg),
+                             np.random.default_rng(4), cfg,
+                             generation=2, master_seed=42)
+        db = tmp_path / "m.sqlite"
+
+        bred = [c for c in children if c.genome.parent_id is not None]
+        immigrants = [c for c in children if c.genome.parent_id is None]
+        assert len(bred) == 1
+        assert len(immigrants) == 2
+        assert all(c.generation == 2 for c in immigrants)
+        assert len({tuple(c.genome.values.values()) for c in immigrants}) == 2
+        for c in immigrants:
+            g = get_genome(c.genome.genome_id, db_path=db)
+            assert g is not None
+            assert g["parent_id"] is None
+            assert g["mutations"] == []
 
     def test_deterministic_given_rng(self, setup) -> None:
         pop, agents, rows = setup

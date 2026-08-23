@@ -39,7 +39,7 @@ Market Data → Feature Engine → Simulator ← Agent → Risk Manager → Exec
 | M10 | Fitness               | ✅     |
 | M11 | Death                 | ✅     |
 | M12 | Reproduction          | ✅     |
-| M13 | Mutation policy       | ⬜     |
+| M13 | Mutation policy       | ✅     |
 | M14 | Generations loop      | ⬜     |
 | M15 | Lineage tools         | ⬜     |
 | M16+ | Regimes → live       | ⬜     |

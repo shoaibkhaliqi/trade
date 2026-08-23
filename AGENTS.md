@@ -9,9 +9,29 @@ An **experimental research system** evolving populations of trading agents
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** M12 complete (reproduction & selection: rank-based parents,
-mutated children with lineage, optional weight inheritance). Next milestone:
-M13 (mutation policy & diversity).
+**Status:** M13 complete (diversity metrics, mutation-intensity schedule,
+immigrant injection). Next milestone: M14 (generational loop automation).
+
+## Diversity Facts (M13)
+
+- `evolution/diversity.py`: genome_distance = mean per-gene |delta|/span
+  (normalized so every gene counts equally); population_diversity ->
+  DiversityReport(n_unique, mean/min/max pairwise, per-gene normalized std).
+  converging iff n_unique<=1 or mean<0.05; formatter flags near-converged
+  genes (std<0.02).
+- ReproductionConfig policy knobs: intensity_decay (per-generation multiplier
+  floored by min_intensity via effective_intensity) +
+  immigrants_per_generation (random genomes, parent=None, persisted like
+  siblings, counted in reproduce() output).
+- MATH GOTCHA (test-pinned): mean-pairwise distance is NOT monotonic under
+  additions (centroid dilution); coverage (max pairwise) is - assert the
+  guaranteed property, not the hoped-for one.
+- Live roster: 12 genomes mean 0.309 all unique; gen-2 breed demo produced
+  18 genomes unique=17 with min_pairwise=0.000 - the monitor caught a
+  duplicate (zero-mutation child) on its first run. That tripwire is the
+  deliverable.
+- scripts/diversity_report.py: CLI over the stored roster.
+
 
 ## Reproduction Facts (M12)
 
