@@ -31,6 +31,16 @@ CREATE TABLE IF NOT EXISTS genomes (
     mutations_json TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS agents (
+    agent_id TEXT PRIMARY KEY,
+    genome_id TEXT NOT NULL,
+    seed INTEGER NOT NULL,
+    generation INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    model_path TEXT,
+    metrics_json TEXT,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -99,6 +109,78 @@ def lineage_of(genome_id: str, db_path: Path | str = DEFAULT_DB) -> list[dict]:
         chain.append(node)
         current = node["parent_id"]
     return chain
+
+
+def record_agent(
+    agent_id: str,
+    *,
+    genome_id: str,
+    seed: int,
+    generation: int = 0,
+    status: str = "alive",
+    db_path: Path | str = DEFAULT_DB,
+) -> str:
+    """Register an agent in the population roster."""
+    path = Path(db_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    created = datetime.now(UTC).isoformat(timespec="seconds")
+    with sqlite3.connect(path) as conn:
+        conn.executescript(_SCHEMA)
+        conn.execute(
+            "INSERT INTO agents "
+            "(agent_id, genome_id, seed, generation, status, model_path, metrics_json, created_at) "
+            "VALUES (?, ?, ?, ?, ?, NULL, NULL, ?) "
+            "ON CONFLICT(agent_id) DO NOTHING",
+            (agent_id, genome_id, seed, generation, status, created),
+        )
+        conn.commit()
+    return agent_id
+
+
+def update_agent_result(
+    agent_id: str,
+    *,
+    metrics: dict,
+    model_path: str,
+    status: str = "evaluated",
+    db_path: Path | str = DEFAULT_DB,
+) -> None:
+    with sqlite3.connect(Path(db_path)) as conn:
+        conn.executescript(_SCHEMA)
+        conn.execute(
+            "UPDATE agents SET metrics_json = ?, model_path = ?, status = ? "
+            "WHERE agent_id = ?",
+            (json.dumps(metrics, sort_keys=True, default=str), model_path, status, agent_id),
+        )
+        conn.commit()
+
+
+def get_agents(db_path: Path | str = DEFAULT_DB, status: str | None = None) -> list[dict]:
+    """All agent rows (optionally filtered), oldest first."""
+    query = (
+        "SELECT agent_id, genome_id, seed, generation, status, model_path, metrics_json "
+        "FROM agents"
+    )
+    params: tuple = ()
+    if status is not None:
+        query += " WHERE status = ?"
+        params = (status,)
+    query += " ORDER BY created_at, agent_id"
+    with sqlite3.connect(Path(db_path)) as conn:
+        conn.executescript(_SCHEMA)
+        rows = conn.execute(query, params).fetchall()
+    return [
+        {
+            "agent_id": r[0],
+            "genome_id": r[1],
+            "seed": r[2],
+            "generation": r[3],
+            "status": r[4],
+            "model_path": r[5],
+            "metrics": json.loads(r[6]) if r[6] else None,
+        }
+        for r in rows
+    ]
 
 
 def record_experiment(kind: str, payload: dict, db_path: Path | str = DEFAULT_DB) -> str:

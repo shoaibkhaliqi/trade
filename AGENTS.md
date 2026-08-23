@@ -9,8 +9,27 @@ An **experimental research system** evolving populations of trading agents
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** M8 complete (agent genome: bounded genes, controlled recorded
-mutation, SQLite lineage). Next milestone: M9 (population).
+**Status:** M9 complete (population roster, identical-arena evaluation, leaderboard,
+resumable runs). Next milestone: M10 (fitness function).
+
+## Population Facts (M9)
+
+- `Population(size, db).initialize(master_seed)`: deterministic roster of
+  (genome, seed) pairs; genomes+agents persisted BEFORE evaluation; roster
+  ids reproducible from master_seed; `record_agent` is idempotent
+  (ON CONFLICT DO NOTHING) so re-runs RESUME - run_population skips
+  already-evaluated agents.
+- `training.train_and_evaluate(..., score_window_bars=N)` scores TEST on the
+  first N test rows (population-scale); None = full slice. Same arena for
+  every agent: identical slices/costs/risk-baseline/timesteps.
+- FIRST RUN (8 agents, 5k steps, 5k-bar score window, ~39s/agent):
+  5 of 8 collapsed to NEVER-TRADE (0 trades, exactly 0.00%); traders spread
+  [+0.93%, -2.82%]. The flat-policy attractor is real at low training budgets
+  - M10 fitness MUST handle it (a naive risk-adjusted ranking would crown
+  paralysis; minimum-activity or baseline-relative scoring needed).
+- scripts/run_population.py: progress prints, DB-read leaderboard (roster is
+  truth, not memory), dispersion summary, experiment row kind='population'.
+
 
 ## Genome Facts (M8)
 

@@ -100,11 +100,14 @@ def train_and_evaluate(
     eval_window: int = 3_000,
     out_dir: str = "experiments/runs",
     genome: Genome | None = None,
+    score_window_bars: int | None = None,
 ) -> tuple[str, MetricsReport]:
     """Train on [0, train_end), validate near VAL tail, score once on TEST.
 
     When ``genome`` is provided it overrides stop/TP/cooldown/trade-cap in the
     risk layer and PPO learning genes; entry sizing uses its position gene.
+    ``score_window_bars`` optionally limits the TEST scoring to the first N
+    test rows (population-scale scoring); None means the full test slice.
     """
     effective_risk = risk_config_from_genome(risk_cfg, genome)
     episode_sim_cfg = sim_cfg
@@ -163,6 +166,10 @@ def train_and_evaluate(
 
     test_candles = ohlcv.iloc[val_end:].reset_index(drop=True)
     test_feats = feats.iloc[val_end:].reset_index(drop=True)
+    if score_window_bars is not None:
+        keep = min(score_window_bars, len(test_candles))
+        test_candles = test_candles.iloc[:keep].reset_index(drop=True)
+        test_feats = test_feats.iloc[:keep].reset_index(drop=True)
     report = evaluate_agent_on_test(
         model_path, test_candles, test_feats,
         sim_cfg=episode_sim_cfg, risk_cfg=effective_risk,
