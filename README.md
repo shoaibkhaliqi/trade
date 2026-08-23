@@ -36,7 +36,7 @@ Market Data → Feature Engine → Simulator ← Agent → Risk Manager → Exec
 | M7 | Proper validation      | ✅     |
 | M8 | Agent genome           | ✅     |
 | M9 | Population             | ✅     |
-| M10 | Fitness               | ⬜     |
+| M10 | Fitness               | ✅     |
 | M11 | Death                 | ⬜     |
 | M12 | Reproduction          | ⬜     |
 | M13 | Mutation policy       | ⬜     |

@@ -9,8 +9,31 @@ An **experimental research system** evolving populations of trading agents
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** M9 complete (population roster, identical-arena evaluation, leaderboard,
-resumable runs). Next milestone: M10 (fitness function).
+**Status:** M10 complete (fitness functions: 6-term spec formula, presets,
+baseline-relative anti-paralysis scoring, population integration). Next
+milestone: M11 (death & survival states).
+
+## Fitness Facts (M10)
+
+- `evolution/fitness.py`: `compute_fitness(metrics_dict, FitnessConfig)` ->
+  FitnessBreakdown(total, components). Every component clipped to [-1,1];
+  fitness bounded by sum of weights. Full component breakdown always returned
+  (auditable rankings).
+- THE ANTI-PARALYSIS LAW: return term is BASELINE-RELATIVE (agent return -
+  buy&hold on identical score window). M9 measured 5-of-8 agents collapsing
+  to never-trade; risk-adjusted-only scoring would crown paralysis
+  (test-pinned: risk_parity strawman ranks flat above mild losers; the
+  conservative preset let the flat cluster sweep the podium in the live demo).
+- Presets: spec (default), pure_return + risk_parity (strawmen kept to
+  demonstrate failure modes), conservative (dd-heavy). `--fitness` flag on
+  run_population; fitness stored in agent metrics_json; leaderboard sorts by it.
+- Live demo (fitness_report.py, 8-agent roster, window b&h=+3.59%): spec
+  ranks the only real trader first; conservative ranks the FLAT CLUSTER
+  1st-5th and the profitable agent 6th. Fitness IS the objective - choose it
+  like one.
+- Baseline is computed per-run on the exact score window (window b&h can
+  differ a lot from full-test b&h: +3.59% vs +0.84% on M9 data).
+
 
 ## Population Facts (M9)
 

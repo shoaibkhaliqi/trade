@@ -11,7 +11,10 @@ import time
 
 import numpy as np
 
+from darwin.agents import BuyAndHoldStrategy
+from darwin.environment.simulator import TradingSimulator
 from darwin.evaluation.metrics import format_header, format_row
+from darwin.evolution.fitness import compute_fitness, preset
 from darwin.evolution.population import Population
 from darwin.execution.risk import RiskConfig
 from darwin.experiments.tracker import get_agents, record_experiment
@@ -33,6 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--score-window", type=int, default=5_000)
     parser.add_argument("--train-frac", type=float, default=0.70)
     parser.add_argument("--eval-window", type=int, default=3_000)
+    parser.add_argument("--fitness", default="spec")
     return parser.parse_args()
 
 
@@ -45,6 +49,18 @@ def main() -> int:
 
     sim_cfg = sim_config_from_yaml(cfg)
     risk_cfg = RiskConfig(**cfg["risk"])
+
+    # fitness compass + its baseline: buy&hold on the identical score window
+    val_end = int(n * (args.train_frac + 0.15))
+    window = ohlcv.iloc[val_end : val_end + args.score_window].reset_index(drop=True)
+    bh = TradingSimulator(sim_cfg).run(
+        window, BuyAndHoldStrategy().generate_actions(window)
+    )
+    baseline = float(
+        bh.equity_curve["equity"].iloc[-1] / bh.equity_curve["equity"].iloc[0] - 1.0
+    )
+    fcfg = preset(args.fitness, baseline_return=baseline)
+    print(f"fitness={args.fitness} | buy&hold baseline on score window: {baseline:+.2%}")
 
     pop = Population(size=args.size)
     agents = pop.initialize(master_seed=args.master_seed)
@@ -74,8 +90,14 @@ def main() -> int:
             genome=agent.genome,
             score_window_bars=args.score_window,
         )
-        pop.record_result(agent.agent_id, metrics=vars(report),
-                          model_path=model_path)
+        pop.record_result(
+            agent.agent_id,
+            metrics={**vars(report), "fitness": compute_fitness(
+                {**vars(report), "initial_capital_proxy": sim_cfg.initial_capital},
+                fcfg,
+            ).total},
+            model_path=model_path,
+        )
         print(f"[{i:>3}/{len(agents)}] {agent.agent_id} "
               f"ret={report.total_return:+7.2%} dd={report.max_drawdown:>7.2%} "
               f"sharpe={report.sharpe:>7.3f} trades={report.n_trades:>4d} "
@@ -84,15 +106,16 @@ def main() -> int:
     # ------------------------------------------------------------------
     # leaderboard: read back from DB - the roster, not local memory, is truth
     # ------------------------------------------------------------------
-    rows = [r for r in get_agents(db_path=pop.db_path) if r["metrics"]]
-    rows.sort(key=lambda r: r["metrics"]["total_return"], reverse=True)
+    rows = [r for r in get_agents(db_path=pop.db_path)
+            if r["metrics"] and "fitness" in r["metrics"]]
+    rows.sort(key=lambda r: r["metrics"]["fitness"], reverse=True)
 
-    print("\n=== LEADERBOARD (by total_return) ===")
-    print(format_header())
+    print(f"\n=== LEADERBOARD (by fitness: {args.fitness}) ===")
+    print(format_header() + "     fitness")
     for r in rows:
         m = r["metrics"]
         report = type("R", (), m)()  # MetricsReport-like shim for formatting
-        print(format_row(r["agent_id"][-8:], report))
+        print(format_row(r["agent_id"][-8:], report) + f"  {m['fitness']:+8.3f}")
 
     rets = np.array([r["metrics"]["total_return"] for r in rows])
     print(f"\nspread: mean {rets.mean():+.2%} | std {rets.std():.2%} | "
@@ -106,6 +129,8 @@ def main() -> int:
         "timeframe": args.timeframe,
         "timesteps": args.timesteps,
         "score_window": args.score_window,
+        "fitness": args.fitness,
+        "baseline_return": baseline,
         "git_commit": git_commit(),
         "returns": rets.tolist(),
         "agent_ids": [r["agent_id"] for r in rows],
