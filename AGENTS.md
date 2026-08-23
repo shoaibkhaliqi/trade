@@ -9,8 +9,30 @@ An **experimental research system** evolving populations of trading agents
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** M5 complete (PPO/MLP agent trained in Gym env, evaluated vs benchmarks,
-experiment logged). Next milestone: M6 (risk engine).
+**Status:** M6 complete (non-bypassable risk engine inside TradingEnv). Next
+milestone: M7 (proper validation: walk-forward, leakage tests).
+
+## Risk Engine Facts (M6)
+
+- `RiskManager(RiskConfig).apply(proposed, ctx, base_size_pct=100.0,
+  stop_distance_pct=None) -> (Action, size_pct|None)`. Wired INSIDE
+  `TradingEnv.step`, so no policy can submit an unfiltered action; benchmark
+  strategies intentionally run raw (they are reference traders, not models).
+- Priority: auto-exits (max_drawdown LATCHED kill-switch > stop_loss >
+  take_profit; triggers read CLOSE, fills ride next-open queue) > CLOSE always
+  allowed > latch vetoes entries forever > daily-loss / cooldown /
+  max-trades-per-day veto > size/leverage/risk-per-trade clamps shrink via
+  `simulator.submit(action, size_pct=...)` (effective = min(cfg, allowed)).
+- UNITS GOTCHA (load-bearing test pins it): config fields are PERCENT;
+  `stop_distance_pct` is a FRACTION. A wrong-unit bug here fails OPEN
+  (permissive), which is the dangerous direction - test asserts 1% risk @2%
+  stop => 50% size.
+- Config keys under yaml `risk:` map 1:1 to RiskConfig fields across
+  development/backtest/paper profiles.
+- Real-data proof (M5 seed42 agent on TEST): unguarded -0.92%/dd -7.41% vs
+  guarded -1.44%/dd -6.49%, 10 stop-loss exits, 22 vetoed entries. Protection
+  costs fees and buys bounded tails - insurance, not alpha.
+
 
 ## RL Environment Facts (M5)
 
