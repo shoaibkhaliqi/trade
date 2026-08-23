@@ -44,10 +44,9 @@ class TestContract:
 
 
 class TestBuyAndHold:
-    def test_shape_and_first_action(self) -> None:
+    def test_persistent_target_state(self) -> None:
         actions = BuyAndHoldStrategy().generate_actions(_candles([100] * 5, [100] * 5))
-        assert actions[0] == Action.LONG
-        assert all(a == Action.HOLD for a in actions[1:])
+        assert all(a == Action.LONG for a in actions)
 
     def test_simulator_output_matches_analytical_value(self) -> None:
         # flat entry at open=100, final close 123, no costs, full position

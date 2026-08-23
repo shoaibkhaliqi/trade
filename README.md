@@ -33,7 +33,7 @@ Market Data → Feature Engine → Simulator ← Agent → Risk Manager → Exec
 | M4 | Benchmark strategies   | ✅     |
 | M5 | Single AI agent        | ✅     |
 | M6 | Risk engine            | ✅     |
-| M7 | Proper validation      | ⬜     |
+| M7 | Proper validation      | ✅     |
 | M8+| Evolution machinery    | ⬜     |
 
 ## Setup

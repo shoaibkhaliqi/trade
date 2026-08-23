@@ -49,15 +49,17 @@ def _signs_to_actions(signs: np.ndarray) -> list[Action]:
 
 
 class BuyAndHoldStrategy:
-    """Enter long after the first candle; never manage the position."""
+    """Target state: long for the entire horizon.
+
+    Emits a persistent target-state series (LONG everywhere) rather than a
+    single entry event - repeats are no-ops in the simulator, and fold-based
+    evaluation can sample any bar of this list and read the true intent.
+    """
 
     name = "buy_and_hold"
 
     def generate_actions(self, ohlcv: pd.DataFrame) -> list[Action]:
-        actions = [Action.HOLD] * len(ohlcv)
-        if actions:
-            actions[0] = Action.LONG
-        return actions
+        return [Action.LONG] * len(ohlcv)
 
 
 class RandomTraderStrategy:

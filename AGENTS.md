@@ -9,8 +9,30 @@ An **experimental research system** evolving populations of trading agents
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** M6 complete (non-bypassable risk engine inside TradingEnv). Next
-milestone: M7 (proper validation: walk-forward, leakage tests).
+**Status:** M7 complete (walk-forward + embargo splits, seed-variance sweep,
+experiment history viewer). Next milestone: M8 (agent genome).
+
+## Validation Facts (M7)
+
+- `experiments/splits.py`: chronological_split + walk_forward_splits
+  (rolling origin, EMBARGO gap between train end and test start; with
+  step==test_bars the test windows tile the tail contiguously - geometry
+  is hand-computed in test_splits.py).
+- Walk-forward protocol (scripts/walk_forward.py): strategy sees
+  train+embargo+test slice so indicators warm on pre-test data only;
+  decisions before the last pre-test bar are forced HOLD; metrics scored on
+  the out-of-sample equity portion only. Action lists are TARGET-STATE series
+  - BuyAndHold emits persistent LONG (fold sampling reads intent at any bar).
+- Seed variance (scripts/seed_sweep.py, reusable core in
+  experiments/training.py): identical configs across seeds spread
+  [-1.44%, +1.22%] TEST return at 20k steps - single-seed results are noise.
+  Seeds 7 and 123 converged to IDENTICAL policies (same attractor).
+- Empirical walk-forward baseline (PAXGUSDT 15m, 25 folds x 5000 bars):
+  b&h +0.92%/fold std 1.89% (sharpe_mu 1.36); random -30.9%; ema_cross
+  -16.4%; rsi/vwap ~-1.6%. CSV per-fold details under experiments/.
+- scripts/list_experiments.py prints metadata.sqlite history (handles both
+  train_agent and aggregate sweep rows).
+
 
 ## Risk Engine Facts (M6)
 
