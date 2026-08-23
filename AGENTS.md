@@ -9,8 +9,34 @@ An **experimental research system** evolving populations of trading agents
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** M11 complete (survival states, death certificates, roster integration).
-Next milestone: M12 (reproduction & selection).
+**Status:** M12 complete (reproduction & selection: rank-based parents,
+mutated children with lineage, optional weight inheritance). Next milestone:
+M13 (mutation policy & diversity).
+
+## Reproduction Facts (M12)
+
+- `evolution/reproduction.py`: select_parents (DEAD excluded from the gene
+  pool; alive/weak ranked by stored fitness, ties stable, unevaluated
+  ineligible) + reproduce (offspring per rank tier from
+  ReproductionConfig.offspring_per_rank; fresh agent ids/seeds; generation+1;
+  child genomes persisted BEFORE training). Config validates tiers/rates.
+- Children flow through THE SAME funnel as founders:
+  `Population.evaluate_agent` (train -> score -> fitness -> survival ->
+  persist). Selection never compares apples to oranges.
+- Weight inheritance ("parent knowledge") is opt-in: `--inherit-weights` /
+  `training.init_from_model_path` loads the parent's trained PPO, overrides
+  the child's mutated learning genes, continues training. Default OFF for
+  generation-1 exploration honesty.
+- Legacy-roster gotcha: founders predate fitness storage; `fitness_report
+  --apply` backfills fitness via `tracker.merge_agent_metrics`. Selection
+  reads the ROSTER - computed-on-the-fly scores do not count.
+- FIRST EVOLUTION STEP (gen0 -> gen1, 3 parents, 4 children, 5k steps):
+  best child fitness +0.296 (ALIVE) vs best founder -0.417 - first
+  positive-compass agent in project history. Anecdote, not proof; the
+  machinery is the deliverable. Children train ~14s each on CPU.
+- scripts/breed_generation.py: prints parents, per-mutation birth records,
+  child evaluations, generation leaderboard; records experiment kind='breed'.
+
 
 ## Survival Facts (M11)
 

@@ -86,13 +86,14 @@ def main() -> int:
         reasons = "; ".join(verdict.reasons) if verdict.reasons else "-"
         print(f"{a['agent_id'][-8:]:<12} {verdict.status:>5}  {reasons}")
     if args.apply:
-        from darwin.experiments.tracker import mark_agent_status
+        from darwin.experiments.tracker import mark_agent_status, merge_agent_metrics
 
         for a in agents:
             m = dict(a["metrics"])
             m.setdefault("initial_capital_proxy", 1000.0)
             fit = compute_fitness(m, spec_cfg).total
             verdict = evaluate_survival(m, fit, surv_cfg)
+            merge_agent_metrics(a["agent_id"], {"fitness": fit}, db_path=args.db)
             mark_agent_status(
                 a["agent_id"], verdict.status,
                 reason="; ".join(verdict.reasons) if verdict.reasons else None,

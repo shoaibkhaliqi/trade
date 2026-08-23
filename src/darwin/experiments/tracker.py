@@ -201,6 +201,29 @@ def mark_agent_status(
         conn.commit()
 
 
+def merge_agent_metrics(
+    agent_id: str,
+    fields: dict,
+    db_path: Path | str = DEFAULT_DB,
+) -> None:
+    """Merge keys into an agent's stored metrics (e.g. backfilling fitness)."""
+    with sqlite3.connect(Path(db_path)) as conn:
+        conn.executescript(_SCHEMA)
+        row = conn.execute(
+            "SELECT metrics_json FROM agents WHERE agent_id = ?", (agent_id,)
+        ).fetchone()
+        if row is None:
+            msg = f"unknown agent: {agent_id}"
+            raise ValueError(msg)
+        metrics = json.loads(row[0]) if row[0] else {}
+        metrics.update(fields)
+        conn.execute(
+            "UPDATE agents SET metrics_json = ? WHERE agent_id = ?",
+            (json.dumps(metrics, sort_keys=True, default=str), agent_id),
+        )
+        conn.commit()
+
+
 def get_deaths(db_path: Path | str = DEFAULT_DB) -> list[dict]:
     """All death certificates, oldest first."""
     with sqlite3.connect(Path(db_path)) as conn:

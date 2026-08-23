@@ -101,6 +101,7 @@ def train_and_evaluate(
     out_dir: str = "experiments/runs",
     genome: Genome | None = None,
     score_window_bars: int | None = None,
+    init_from_model_path: str | None = None,
 ) -> tuple[str, MetricsReport]:
     """Train on [0, train_end), validate near VAL tail, score once on TEST.
 
@@ -108,6 +109,8 @@ def train_and_evaluate(
     risk layer and PPO learning genes; entry sizing uses its position gene.
     ``score_window_bars`` optionally limits the TEST scoring to the first N
     test rows (population-scale scoring); None means the full test slice.
+    ``init_from_model_path`` continues training from a parent's weights
+    (inheritance of knowledge) instead of starting from random policy init.
     """
     effective_risk = risk_config_from_genome(risk_cfg, genome)
     episode_sim_cfg = sim_cfg
@@ -139,19 +142,28 @@ def train_and_evaluate(
             risk=RiskManager(effective_risk),
         )
 
-    model = PPO(
-        "MlpPolicy",
-        DummyVecEnv([make_train]),
-        seed=seed,
-        # measured on this stack (M9): CPU 748 fps vs CUDA 303 fps for a
-        # ~5k-param MLP fed by a single Python env - the GPU starves waiting
-        # for env steps. Revisit when policies/parallel envs grow.
-        device="cpu",
-        verbose=0,
-        n_steps=2048,
-        batch_size=256,
-        **ppo_kwargs_from_genome(genome),
-    )
+    learning_kwargs = ppo_kwargs_from_genome(genome)
+    if init_from_model_path is not None:
+        # inheritance of knowledge: start from the parent's trained weights,
+        # override the child's mutated learning genes, keep training
+        model = PPO.load(init_from_model_path, device="cpu")
+        model.set_env(DummyVecEnv([make_train]))
+        for key, value in learning_kwargs.items():
+            setattr(model, key, value)
+    else:
+        model = PPO(
+            "MlpPolicy",
+            DummyVecEnv([make_train]),
+            seed=seed,
+            # measured on this stack (M9): CPU 748 fps vs CUDA 303 fps for a
+            # ~5k-param MLP fed by a single Python env - the GPU starves
+            # waiting for env steps. Revisit when policies/parallel envs grow.
+            device="cpu",
+            verbose=0,
+            n_steps=2048,
+            batch_size=256,
+            **learning_kwargs,
+        )
     callback = EvalCallback(
         make_val_quick(),
         eval_freq=max(eval_window // 2, 256),

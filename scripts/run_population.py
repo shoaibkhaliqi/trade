@@ -14,20 +14,18 @@ import numpy as np
 from darwin.agents import BuyAndHoldStrategy
 from darwin.environment.simulator import TradingSimulator
 from darwin.evaluation.metrics import format_header, format_row
-from darwin.evolution.fitness import compute_fitness, preset
+from darwin.evolution.fitness import preset
 from darwin.evolution.population import Population
-from darwin.evolution.survival import SurvivalConfig, evaluate_survival
+from darwin.evolution.survival import SurvivalConfig
 from darwin.execution.risk import RiskConfig
 from darwin.experiments.tracker import (
     get_agents,
-    mark_agent_status,
     record_experiment,
 )
 from darwin.experiments.training import (
     git_commit,
     load_frames,
     sim_config_from_yaml,
-    train_and_evaluate,
 )
 
 
@@ -82,32 +80,14 @@ def main() -> int:
             print(f"[{i:>3}/{len(agents)}] {agent.agent_id} already evaluated - skipped")
             continue
         t0 = time.time()
-        model_path, report = train_and_evaluate(
-            seed=agent.seed,
-            ohlcv=ohlcv,
-            feats=feats,
-            timeframe=args.timeframe,
-            sim_cfg=sim_cfg,
-            risk_cfg=risk_cfg,
-            train_end=train_end,
-            val_end=val_end,
-            timesteps=args.timesteps,
-            eval_window=args.eval_window,
-            genome=agent.genome,
-            score_window_bars=args.score_window,
-        )
-        metrics = vars(report)
-        metrics["fitness"] = compute_fitness(
-            {**metrics, "initial_capital_proxy": sim_cfg.initial_capital}, fcfg
-        ).total
-        verdict = evaluate_survival(metrics, metrics["fitness"], survival_cfg)
-        pop.record_result(agent.agent_id, metrics=metrics, model_path=model_path)
-        mark_agent_status(
-            agent.agent_id,
-            verdict.status,
-            reason="; ".join(verdict.reasons) if verdict.reasons else None,
-            fitness=metrics["fitness"],
-            max_drawdown=report.max_drawdown,
+        report, metrics, verdict = pop.evaluate_agent(
+            agent,
+            ohlcv=ohlcv, feats=feats, timeframe=args.timeframe,
+            sim_cfg=sim_cfg, risk_cfg=risk_cfg,
+            fitness_cfg=fcfg, survival_cfg=survival_cfg,
+            train_end=train_end, val_end=val_end,
+            timesteps=args.timesteps, eval_window=args.eval_window,
+            score_window=args.score_window,
         )
         symbol_map = {"alive": "+", "weak": "~", "dead": "x"}
         print(f"[{i:>3}/{len(agents)}] {agent.agent_id} "

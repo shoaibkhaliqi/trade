@@ -15,12 +15,17 @@ from typing import Any
 
 import numpy as np
 
+from darwin.environment.simulator import SimulatorConfig
+from darwin.evolution.fitness import FitnessConfig, compute_fitness
 from darwin.evolution.genome import Genome
+from darwin.evolution.survival import SurvivalConfig, Verdict, evaluate_survival
+from darwin.execution.risk import RiskConfig
 from darwin.experiments.tracker import (
     record_agent,
     record_genome,
     update_agent_result,
 )
+from darwin.experiments.training import train_and_evaluate
 
 
 @dataclass(frozen=True)
@@ -84,3 +89,62 @@ class Population:
             agent_id, metrics=metrics, model_path=model_path,
             status=status, db_path=self.db_path,
         )
+
+    def evaluate_agent(
+        self,
+        agent: AgentSpec,
+        *,
+        ohlcv: Any,
+        feats: Any,
+        timeframe: str,
+        sim_cfg: SimulatorConfig,
+        risk_cfg: RiskConfig,
+        fitness_cfg: FitnessConfig,
+        survival_cfg: SurvivalConfig,
+        train_end: int,
+        val_end: int,
+        timesteps: int,
+        eval_window: int = 3_000,
+        score_window: int | None = None,
+        out_dir: str = "experiments/runs",
+        inherit_weights_from: str | None = None,
+    ) -> tuple[Any, dict, Verdict]:
+        """Train, score, and record one agent. Returns (report, metrics, verdict).
+
+        The single funnel every agent - founder or child - passes through, so
+        selection never compares apples to oranges.
+        """
+        model_path, report = train_and_evaluate(
+            seed=agent.seed,
+            ohlcv=ohlcv,
+            feats=feats,
+            timeframe=timeframe,
+            sim_cfg=sim_cfg,
+            risk_cfg=risk_cfg,
+            train_end=train_end,
+            val_end=val_end,
+            timesteps=timesteps,
+            eval_window=eval_window,
+            out_dir=out_dir,
+            genome=agent.genome,
+            score_window_bars=score_window,
+            init_from_model_path=inherit_weights_from,
+        )
+        metrics = vars(report)
+        metrics["fitness"] = compute_fitness(
+            {**metrics, "initial_capital_proxy": sim_cfg.initial_capital},
+            fitness_cfg,
+        ).total
+        verdict = evaluate_survival(metrics, metrics["fitness"], survival_cfg)
+        self.record_result(agent.agent_id, metrics=metrics, model_path=model_path)
+        from darwin.experiments.tracker import mark_agent_status
+
+        mark_agent_status(
+            agent.agent_id,
+            verdict.status,
+            reason="; ".join(verdict.reasons) if verdict.reasons else None,
+            fitness=metrics["fitness"],
+            max_drawdown=report.max_drawdown,
+            db_path=self.db_path,
+        )
+        return report, metrics, verdict

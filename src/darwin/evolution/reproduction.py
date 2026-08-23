@@ -1,0 +1,137 @@
+"""Reproduction: fitness selects parents; children inherit mutated genomes.
+
+Selection rules:
+- DEAD agents are out of the gene pool (M11 status is the first filter).
+- Eligible parents (alive/weak with a fitness score) are ranked; the top
+  ``len(offspring_per_rank)`` breed, rank k producing offspring_per_rank[k]
+  children. Weak parents may breed: mutation variance is their recovery path.
+- Every child gets: fresh agent_id, its own training seed, generation+1, a
+  mutated genome whose birth record (mutations + parent link) is persisted
+  BEFORE the child ever trains.
+
+Inheritance of knowledge (parent weights) is an explicit opt-in flag at the
+training layer - default children start from fresh policies under their
+mutated genomes, keeping generation-1 exploration honest.
+"""
+
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass
+from typing import Any
+
+import numpy as np
+
+from darwin.evolution.genome import Genome, MutationRecord
+from darwin.evolution.population import AgentSpec, Population
+from darwin.experiments.tracker import record_agent, record_genome
+
+STATUS_DEAD = "dead"
+
+
+@dataclass(frozen=True)
+class ReproductionConfig:
+    offspring_per_rank: tuple[int, ...] = (2, 1, 1)
+    mutation_rate: float = 0.35
+    mutation_intensity: float = 0.25
+
+    def __post_init__(self) -> None:
+        if any(n < 0 for n in self.offspring_per_rank):
+            msg = "offspring counts must be non-negative"
+            raise ValueError(msg)
+        if sum(self.offspring_per_rank) == 0:
+            msg = "reproduction with zero total offspring does nothing"
+            raise ValueError(msg)
+        if not 0 <= self.mutation_rate <= 1:
+            msg = "mutation_rate must be within [0, 1]"
+            raise ValueError(msg)
+        if self.mutation_intensity < 0:
+            msg = "mutation_intensity must be >= 0"
+            raise ValueError(msg)
+
+
+def select_parents(
+    agents: list[dict],
+    cfg: ReproductionConfig,
+) -> list[tuple[dict, int]]:
+    """Rank eligible agents by fitness; pair top ranks with offspring counts.
+
+    ``agents`` rows are tracker dicts (agent_id, status, metrics, ...).
+    """
+    eligible = [
+        a for a in agents
+        if a["status"] in ("alive", "weak")
+        and a.get("metrics")
+        and a["metrics"].get("fitness") is not None
+    ]
+    eligible.sort(key=lambda a: a["metrics"]["fitness"], reverse=True)
+
+    pairs: list[tuple[dict, int]] = []
+    for rank, n_children in enumerate(cfg.offspring_per_rank):
+        if rank >= len(eligible) or n_children == 0:
+            continue
+        pairs.append((eligible[rank], n_children))
+    return pairs
+
+
+def reproduce(
+    population: Population,
+    parents: list[tuple[dict, int]],
+    rng: np.random.Generator,
+    cfg: ReproductionConfig,
+    *,
+    generation: int,
+    master_seed: int,
+) -> list[AgentSpec]:
+    """Create and persist all children; returns their AgentSpecs."""
+    children: list[AgentSpec] = []
+    for parent_row, n_children in parents:
+        parent_genome_row = _parent_genome(population, parent_row)
+        parent = Genome(
+            values=parent_genome_row["values"],
+            genome_id=parent_row["genome_id"],
+        )
+        for _ in range(n_children):
+            genome_id = uuid.uuid4().hex[:10]
+            child_genome = parent.mutate(
+                rng,
+                rate=cfg.mutation_rate,
+                intensity=cfg.mutation_intensity,
+                genome_id=genome_id,
+                generation=generation,
+            )
+            record_genome(
+                child_genome.values,
+                genome_id=genome_id,
+                parent_id=child_genome.parent_id,
+                generation=generation,
+                mutations=[m.__dict__ for m in child_genome.mutations],
+                db_path=population.db_path,
+            )
+            agent_id = f"a{master_seed:05d}-g{generation:02d}-{len(children):03d}"
+            seed = int(rng.integers(0, 2**31 - 1))
+            record_agent(
+                agent_id,
+                genome_id=genome_id,
+                seed=seed,
+                generation=generation,
+                db_path=population.db_path,
+            )
+            children.append(AgentSpec(agent_id=agent_id, genome=child_genome,
+                                      seed=seed, generation=generation))
+    return children
+
+
+def _parent_genome(population: Population, parent_row: dict) -> dict[str, Any]:
+    from darwin.experiments.tracker import get_genome
+
+    row = get_genome(parent_row["genome_id"], db_path=population.db_path)
+    if row is None:
+        msg = f"parent genome missing: {parent_row['genome_id']}"
+        raise RuntimeError(msg)
+    return row
+
+
+def summarize_mutations(children: list[AgentSpec]) -> list[MutationRecord]:
+    """Flat view of every mutation that happened in this birth wave."""
+    return [m for c in children for m in c.genome.mutations]
