@@ -20,6 +20,7 @@ from typing import Any
 
 import gymnasium as gym
 import numpy as np
+import pandas as pd
 from gymnasium import spaces
 
 from darwin.environment.simulator import (
@@ -28,6 +29,7 @@ from darwin.environment.simulator import (
     SimulatorConfig,
     TradingSimulator,
 )
+from darwin.execution.risk import RiskContext, RiskManager
 from darwin.features.schema import ALL_FEATURES
 
 N_ACCOUNT_FEATURES = 3
@@ -50,6 +52,7 @@ class TradingEnv(gym.Env):
         config: SimulatorConfig | None = None,
         start_idx: int | None = None,
         end_idx: int | None = None,
+        risk: RiskManager | None = None,
     ) -> None:
         super().__init__()
         if len(candles) != len(features):
@@ -81,6 +84,9 @@ class TradingEnv(gym.Env):
         self._span = self._end - self._start + 1
 
         self.sim = TradingSimulator(config or SimulatorConfig())
+        # The risk layer is part of the environment, not the agent: any policy
+        # trained/evaluated here physically cannot submit an unfiltered action.
+        self.risk = risk
         obs_dim = self._feat_rows.shape[1] + N_ACCOUNT_FEATURES
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32
@@ -88,6 +94,7 @@ class TradingEnv(gym.Env):
         self.action_space = spaces.Discrete(len(list(Action)))
 
         self._equity_peak: float | None = None
+        self._flat_bars: int | None = 0  # bars since last exit; None while positioned
         self.last_result: SimResult | None = None
 
     # ------------------------------------------------------------------
@@ -120,6 +127,21 @@ class TradingEnv(gym.Env):
         self._equity_peak = float(info["equity"])  # type: ignore[arg-type]
         return self._observe(info), {"index": int(info["index"])}  # type: ignore[arg-type]
 
+    def _risk_context(self, mark: float) -> RiskContext:
+        wallet = self.sim.wallet
+        peak = self._equity_peak if self._equity_peak is not None else wallet.equity(mark)
+        return RiskContext(
+            timestamp=pd.Timestamp(self.sim._timestamps[self.sim._i]),  # noqa: SLF001
+            bar_index=self.sim._i,  # noqa: SLF001
+            mark=mark,
+            equity=wallet.equity(mark),
+            peak_equity=peak,
+            position_qty=wallet.qty,
+            entry_price=wallet.entry if wallet.has_position else float("nan"),
+            total_trades=self.sim.n_trades,
+            bars_since_exit=self._flat_bars,
+        )
+
     @staticmethod
     def _log_reward(prev_equity: float, equity: float) -> float:
         """Per-step reward: log growth of marked equity; account blow-up => -10."""
@@ -133,10 +155,32 @@ class TradingEnv(gym.Env):
         if self._equity_peak is None:
             msg = "step() called before reset()"
             raise RuntimeError(msg)
-        prev_equity = float(self.sim.wallet.equity(float(self.sim._closes[self.sim._i])))  # noqa: SLF001
+        i = self.sim._i  # noqa: SLF001 - same-package contract with the simulator
+        mark = float(self.sim._closes[i])  # noqa: SLF001
+        prev_equity = float(self.sim.wallet.equity(mark))
 
-        self.sim.submit(action_to_signal(int(action)))
+        proposed = action_to_signal(int(action))
+        size_pct: float | None = None
+        if self.risk is not None:
+            ctx = self._risk_context(mark)
+            stop_distance = (
+                self.risk.cfg.stop_loss_pct / 100.0
+                if self.risk.cfg.stop_loss_pct is not None
+                else None
+            )
+            proposed, size_pct = self.risk.apply(
+                proposed,
+                ctx,
+                base_size_pct=self.sim.cfg.position_size_pct,
+                stop_distance_pct=stop_distance,
+            )
+        self.sim.submit(proposed, size_pct=size_pct)
         info = self.sim.step()
+
+        if self.sim.wallet.has_position:
+            self._flat_bars = None
+        else:
+            self._flat_bars = 0 if self._flat_bars is None else self._flat_bars + 1
         equity = float(info["equity"])  # type: ignore[arg-type]
 
         idx = int(info["index"])  # type: ignore[arg-type]

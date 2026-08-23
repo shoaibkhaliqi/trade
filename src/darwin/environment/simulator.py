@@ -184,13 +184,29 @@ class TradingSimulator:
         self._prepare(candles, None)
         return self._advance()
 
-    def submit(self, action: Action | str | None) -> None:
-        """Queue a decision made on the just-closed candle; fills next step."""
+    def submit(
+        self,
+        action: Action | str | None,
+        *,
+        size_pct: float | None = None,
+    ) -> None:
+        """Queue a decision made on the just-closed candle; fills next step.
+
+        ``size_pct`` optionally clamps the entry sizing for this single fill
+        (the effective size is ``min(configured, size_pct)``). The risk engine
+        uses this to reshape positions without touching accounting internals.
+        """
         self._pending = Action(action) if action is not None else Action.HOLD
+        self._pending_size_pct = size_pct
 
     def step(self) -> dict[str, object]:
         """Advance one candle: fill any pending action at its open."""
         return self._advance()
+
+    @property
+    def n_trades(self) -> int:
+        """Completed round trips so far in the current run/episode."""
+        return len(self._trades)
 
     def result(self) -> SimResult:
         """Finalize the episode (applies close_at_end) and return artifacts."""
@@ -240,6 +256,7 @@ class TradingSimulator:
         self._curve_rows: list[dict[str, object]] = []
         self._pos_meta: dict[str, object] | None = None
         self._pending: Action | None = None
+        self._pending_size_pct: float | None = None
         self._decision_equity = cfg.initial_capital
         self._realized_cum = 0.0
         self._n_unfilled = 0
@@ -252,8 +269,9 @@ class TradingSimulator:
         self._i += 1
         i = self._i
         if self._pending is not None and self._pending != Action.HOLD:
-            self._execute(self._pending, self._opens[i], i)
+            self._execute(self._pending, self._opens[i], i, self._pending_size_pct)
         self._pending = None
+        self._pending_size_pct = None
 
         mark = self._closes[i]
         unreal = self.wallet.unrealized(mark)
@@ -282,7 +300,18 @@ class TradingSimulator:
             "position_qty": self.wallet.qty,
         }
 
-    def _execute(self, action: Action, raw_open: float, idx: int) -> None:
+    def _execute(
+        self,
+        action: Action,
+        raw_open: float,
+        idx: int,
+        size_pct: float | None = None,
+    ) -> None:
+        eff_size_pct = (
+            self.cfg.position_size_pct
+            if size_pct is None
+            else min(self.cfg.position_size_pct, max(size_pct, 0.0))
+        )
         if action == Action.CLOSE:
             if self.wallet.has_position:
                 px = (
@@ -298,7 +327,7 @@ class TradingSimulator:
                 self._flatten(px, idx)
             if self.wallet.qty == 0:
                 px = _buy_fill(raw_open, self._slip)
-                notional = self._decision_equity * self.cfg.position_size_pct / 100.0
+                notional = self._decision_equity * eff_size_pct / 100.0
                 qty = round(notional / px, self.cfg.qty_decimals)
                 if qty < MIN_QTY:
                     self._n_skipped += 1
@@ -316,7 +345,7 @@ class TradingSimulator:
                 self._flatten(px, idx)
             if self.wallet.qty == 0:
                 px = _sell_fill(raw_open, self._slip)
-                notional = self._decision_equity * self.cfg.position_size_pct / 100.0
+                notional = self._decision_equity * eff_size_pct / 100.0
                 qty = round(notional / px, self.cfg.qty_decimals)
                 if qty < MIN_QTY:
                     self._n_skipped += 1

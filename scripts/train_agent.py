@@ -22,6 +22,7 @@ from darwin.data.storage import DataStorage
 from darwin.environment.env import TradingEnv
 from darwin.environment.simulator import SimulatorConfig, TradingSimulator
 from darwin.evaluation.metrics import MetricsReport, format_header, format_row
+from darwin.execution.risk import RiskConfig, RiskManager
 from darwin.experiments.tracker import record_experiment
 
 
@@ -75,12 +76,18 @@ def main() -> int:
           f"val<= {val_end} test={val_end}..{n - 1}")
 
     sim_cfg = sim_config_from_yaml(cfg)
+    risk_cfg = RiskConfig(**cfg["risk"])
+
+    def make_risk() -> RiskManager:
+        # separate instance per environment: latch/day state must not leak
+        return RiskManager(risk_cfg)
 
     def make_train():
         return TradingEnv(
             ohlcv.iloc[:train_end].reset_index(drop=True),
             feats.iloc[:train_end].reset_index(drop=True),
             config=sim_cfg,
+            risk=make_risk(),
         )
 
     def make_val_quick():
@@ -89,6 +96,7 @@ def main() -> int:
             ohlcv.iloc[lo:val_end].reset_index(drop=True),
             feats.iloc[lo:val_end].reset_index(drop=True),
             config=sim_cfg,
+            risk=make_risk(),
         )
 
     train_vec = DummyVecEnv([make_train])
@@ -121,7 +129,7 @@ def main() -> int:
     # ------------------------------------------------------------------
     test_candles = ohlcv.iloc[val_end:].reset_index(drop=True)
     test_feats = feats.iloc[val_end:].reset_index(drop=True)
-    test_env = TradingEnv(test_candles, test_feats, config=sim_cfg)
+    test_env = TradingEnv(test_candles, test_feats, config=sim_cfg, risk=make_risk())
     obs, _ = test_env.reset(seed=args.seed)
     done = False
     while not done:
@@ -151,6 +159,7 @@ def main() -> int:
         "timesteps": args.timesteps,
         "split": {"train_end": train_end, "val_end": val_end, "test_rows": n - val_end},
         "sim_config": str(sim_cfg),
+        "risk_config": str(risk_cfg),
         "git_commit": git_commit(),
         "model_path": out_path + ".zip",
         "test_metrics": vars(agent_report),
