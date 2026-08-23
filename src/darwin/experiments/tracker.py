@@ -167,16 +167,22 @@ def update_agent_result(
     agent_id: str,
     *,
     metrics: dict,
-    model_path: str,
+    model_path: str | None = None,
     status: str = "evaluated",
     db_path: Path | str = DEFAULT_DB,
 ) -> None:
+    """Update metrics/status; ``model_path=None`` leaves the existing path."""
+    sets = ["metrics_json = ?", "status = ?"]
+    params: list = [json.dumps(metrics, sort_keys=True, default=str), status]
+    if model_path is not None:
+        sets.append("model_path = ?")
+        params.append(model_path)
+    params.append(agent_id)
     with sqlite3.connect(Path(db_path)) as conn:
         conn.executescript(_SCHEMA)
         conn.execute(
-            "UPDATE agents SET metrics_json = ?, model_path = ?, status = ? "
-            "WHERE agent_id = ?",
-            (json.dumps(metrics, sort_keys=True, default=str), model_path, status, agent_id),
+            f"UPDATE agents SET {', '.join(sets)} WHERE agent_id = ?",
+            tuple(params),
         )
         conn.commit()
 

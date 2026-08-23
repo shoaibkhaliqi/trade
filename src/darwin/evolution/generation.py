@@ -109,12 +109,10 @@ def run_generation(
         )
         # contract: evaluator returns (report, metrics, verdict); the
         # orchestrator OWNS persistence - fakes stay pure, production's
-        # internal write is an idempotent repeat
+        # internal write is an idempotent repeat. model_path stays untouched:
+        # the evaluator already recorded the real artifact location.
         _report, metrics, verdict = evaluator(agent)
-        population.record_result(
-            agent.agent_id, metrics=metrics,
-            model_path=str(metrics.get("model_path", "evaluator")),
-        )
+        population.record_result(agent.agent_id, metrics=metrics)
         mark_agent_status(
             agent.agent_id, verdict.status,
             reason="; ".join(verdict.reasons) if verdict.reasons else None,

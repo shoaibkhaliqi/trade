@@ -42,7 +42,7 @@ Market Data → Feature Engine → Simulator ← Agent → Risk Manager → Exec
 | M13 | Mutation policy       | ✅     |
 | M14 | Generations loop      | ✅     |
 | M15 | Lineage tools         | ✅     |
-| M16+ | Regimes → live       | ⬜     |
+| M16+ | Regimes → live       | 🔄     |
 
 ## Setup
 

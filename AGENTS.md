@@ -9,8 +9,31 @@ An **experimental research system** evolving populations of trading agents
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** M15 complete (lineage dossiers, mutation provenance, family trees).
-Next milestone: M16 (market regimes).
+**Status:** M16 complete (regime labeling + per-regime evaluation; exposed the
+always-LONG monoculture). Next milestone: M17 (stress testing).
+
+## Regime Facts (M16)
+
+- `evaluation/regimes.py`: regime_timeline (trend = trailing 96-bar return
+  bands strong/weak/sideways; vol = trailing 96-bar std vs EXPANDING MEDIAN
+  OF PAST vol shifted 1 - causal) + regime_performance (per combined-label
+  sum of equity log-returns; WARMUP IS REPORTED as its own bucket so
+  per-label returns always reconstruct the total - no silent bar loss).
+- MATH GOTCHA: bucketing by label needs no contiguity because log-returns
+  are additive over disjoint sets.
+- scripts/regime_report.py: regenerates top-N agents' equity on the score
+  window using their GENOME sizing/risk (fidelity to stored fitness) and
+  prints per-regime tables.
+- THE MONOCULTURE FINDING: three agents with different genomes/seeds/md5s
+  produced IDENTICAL equity - all always-LONG (4999/4999 LONG actions).
+  At 5k-step budgets on a rallying window, PPO collapses to the dominant
+  simple policy; genome diversity is fake if behavior converges. Regime
+  analysis is the detector; longer budgets/reward shaping/exploration
+  bonuses are the candidate cures.
+- Champion regime profile (faithful sizing): bull regimes earn
+  (+1.9/+1.3/+1.3%), strong_bear/high costs -1.98% - a bull specialist,
+  exactly the spec's "one unusual bull market" warning, at small scale.
+
 
 ## Lineage Facts (M15)
 

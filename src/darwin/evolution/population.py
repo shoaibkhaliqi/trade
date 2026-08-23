@@ -82,9 +82,10 @@ class Population:
         self,
         agent_id: str,
         metrics: dict,
-        model_path: str,
+        model_path: str | None = None,
         status: str = "evaluated",
     ) -> None:
+        """Persist metrics/status; model_path=None preserves the stored one."""
         update_agent_result(
             agent_id, metrics=metrics, model_path=model_path,
             status=status, db_path=self.db_path,
