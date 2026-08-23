@@ -143,7 +143,10 @@ def train_and_evaluate(
         "MlpPolicy",
         DummyVecEnv([make_train]),
         seed=seed,
-        device="cuda",
+        # measured on this stack (M9): CPU 748 fps vs CUDA 303 fps for a
+        # ~5k-param MLP fed by a single Python env - the GPU starves waiting
+        # for env steps. Revisit when policies/parallel envs grow.
+        device="cpu",
         verbose=0,
         n_steps=2048,
         batch_size=256,
