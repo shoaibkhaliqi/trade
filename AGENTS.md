@@ -9,8 +9,27 @@ An **experimental research system** evolving populations of trading agents
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** M14 complete (generational loop automation, history table,
-evolution charts). Next milestone: M15 (lineage tools).
+**Status:** M15 complete (lineage dossiers, mutation provenance, family trees).
+Next milestone: M16 (market regimes).
+
+## Lineage Facts (M15)
+
+- `evolution/lineage.py`: children_of/descendants (BFS over genome parent
+  links), mutation_path (ordered root->agent events), gene_origin (most
+  recent ancestor event setting a gene; None = founder value), dossier
+  (ancestry + path + children + death reason + best descendant), hall_of_fame.
+- ID-SPACE GOTCHA (bug caught by tests): tracker.lineage_of walks GENOME ids;
+  lineage.py resolves agent->genome first (`_genome_id_of`). VACUOUS-PASS
+  lesson: empty-path tests passed for the wrong reason until they asserted
+  len>=1.
+- `visualization/lineage.py`: render_tree (ASCII, box-drawing) +
+  plot_subtree (PNG; color=status, y=generation). scripts/lineage.py CLI:
+  --agent dossier [--gene origin], --tree [--plot], --hof.
+- Champion dossier (a02026-g01-000): founder a02026-000 -> 4 gen1 mutations
+  incl stop_loss 5.30->1.26 (the shaping event); 2 children, 5 descendants,
+  best descendant -0.719 (flat): the champion's edge did NOT propagate -
+  visual proof of M14's convergence-pressure finding.
+
 
 ## Generational Loop Facts (M14)
 

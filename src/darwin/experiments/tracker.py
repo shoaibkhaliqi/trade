@@ -292,6 +292,30 @@ def get_generations(db_path: Path | str = DEFAULT_DB) -> list[dict]:
     return [dict(zip(keys, row, strict=True)) for row in rows]
 
 
+def get_children_of(
+    parent_genome_id: str,
+    db_path: Path | str = DEFAULT_DB,
+) -> list[dict]:
+    """Agents whose genome's parent is ``parent_genome_id`` (immediate children)."""
+    query = (
+        "SELECT a.agent_id, a.genome_id, a.seed, a.generation, a.status, "
+        "a.model_path, a.metrics_json "
+        "FROM agents a JOIN genomes g ON a.genome_id = g.genome_id "
+        "WHERE g.parent_id = ? ORDER BY a.created_at, a.agent_id"
+    )
+    with sqlite3.connect(Path(db_path)) as conn:
+        conn.executescript(_SCHEMA)
+        rows = conn.execute(query, (parent_genome_id,)).fetchall()
+    return [
+        {
+            "agent_id": r[0], "genome_id": r[1], "seed": r[2],
+            "generation": r[3], "status": r[4], "model_path": r[5],
+            "metrics": json.loads(r[6]) if r[6] else None,
+        }
+        for r in rows
+    ]
+
+
 def get_deaths(db_path: Path | str = DEFAULT_DB) -> list[dict]:
     """All death certificates, oldest first."""
     with sqlite3.connect(Path(db_path)) as conn:
