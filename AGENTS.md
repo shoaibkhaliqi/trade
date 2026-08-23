@@ -9,8 +9,34 @@ An **experimental research system** evolving populations of trading agents
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** M13 complete (diversity metrics, mutation-intensity schedule,
-immigrant injection). Next milestone: M14 (generational loop automation).
+**Status:** M14 complete (generational loop automation, history table,
+evolution charts). Next milestone: M15 (lineage tools).
+
+## Generational Loop Facts (M14)
+
+- `evolution/generation.py`: cohort_rows / cohort_stats (per-generation
+  cohort semantics; even-count median averages the middle pair) +
+  run_generation (evaluate pending via INJECTED evaluator -> persist ->
+  stats -> diversity -> record -> select FROM COHORT -> breed g+1).
+  Evaluator contract: (report, metrics, verdict); the ORCHESTRATOR owns
+  persistence - fakes stay pure, production's internal write is an
+  idempotent repeat.
+- STALENESS GOTCHA (test-caught): re-fetch cohort rows after evaluation -
+  the pre-eval snapshot carries metrics=None.
+- Selection breeds from the just-evaluated cohort (generational replacement);
+  the roster keeps every ancestor; hall-of-fame = roster query by fitness.
+- `generations` table: best/median/worst fitness, best_return, mean_dd,
+  alive/weak/dead counts, diversity mean/min, immigrants.
+- scripts/evolve.py: backfill_history (pre-table cohorts), N-cycle loop
+  targeting the oldest pending cohort, charts via
+  visualization/evolution.py (fitness curves + diversity track with the
+  0.05 convergence line), HOF print, experiment kind='evolve'.
+- First live run (gen 2 -> 5, 16 agents, ~5min): machinery stable; gens 3-4
+  collapsed toward the flat cluster (median=-0.719 signature) while
+  diversity stayed healthy (0.30-0.40); HOF unchanged (gen-1 +0.296).
+  5k-step budgets + noisy fitness = convergence pressure is REAL; longer
+  budgets and/or stronger immigration are the levers.
+
 
 ## Diversity Facts (M13)
 

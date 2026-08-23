@@ -51,6 +51,22 @@ CREATE TABLE IF NOT EXISTS deaths (
     max_drawdown REAL,
     recorded_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS generations (
+    generation INTEGER PRIMARY KEY,
+    n_agents INTEGER NOT NULL,
+    best_fitness REAL,
+    median_fitness REAL,
+    worst_fitness REAL,
+    best_return REAL,
+    mean_drawdown REAL,
+    n_alive INTEGER,
+    n_weak INTEGER,
+    n_dead INTEGER,
+    diversity_mean REAL,
+    diversity_min REAL,
+    n_immigrants INTEGER,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -222,6 +238,58 @@ def merge_agent_metrics(
             (json.dumps(metrics, sort_keys=True, default=str), agent_id),
         )
         conn.commit()
+
+
+def record_generation_stats(
+    generation: int,
+    *,
+    n_agents: int,
+    best_fitness: float | None,
+    median_fitness: float | None,
+    worst_fitness: float | None,
+    best_return: float | None,
+    mean_drawdown: float | None,
+    n_alive: int,
+    n_weak: int,
+    n_dead: int,
+    diversity_mean: float | None,
+    diversity_min: float | None,
+    n_immigrants: int,
+    db_path: Path | str = DEFAULT_DB,
+) -> None:
+    with sqlite3.connect(Path(db_path)) as conn:
+        conn.executescript(_SCHEMA)
+        conn.execute(
+            "INSERT OR REPLACE INTO generations "
+            "(generation, n_agents, best_fitness, median_fitness, worst_fitness, "
+            " best_return, mean_drawdown, n_alive, n_weak, n_dead, "
+            " diversity_mean, diversity_min, n_immigrants, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                generation, n_agents, best_fitness, median_fitness, worst_fitness,
+                best_return, mean_drawdown, n_alive, n_weak, n_dead,
+                diversity_mean, diversity_min, n_immigrants,
+                datetime.now(UTC).isoformat(timespec="seconds"),
+            ),
+        )
+        conn.commit()
+
+
+def get_generations(db_path: Path | str = DEFAULT_DB) -> list[dict]:
+    with sqlite3.connect(Path(db_path)) as conn:
+        conn.executescript(_SCHEMA)
+        rows = conn.execute(
+            "SELECT generation, n_agents, best_fitness, median_fitness, "
+            "worst_fitness, best_return, mean_drawdown, n_alive, n_weak, "
+            "n_dead, diversity_mean, diversity_min, n_immigrants "
+            "FROM generations ORDER BY generation"
+        ).fetchall()
+    keys = [
+        "generation", "n_agents", "best_fitness", "median_fitness",
+        "worst_fitness", "best_return", "mean_drawdown", "n_alive",
+        "n_weak", "n_dead", "diversity_mean", "diversity_min", "n_immigrants",
+    ]
+    return [dict(zip(keys, row, strict=True)) for row in rows]
 
 
 def get_deaths(db_path: Path | str = DEFAULT_DB) -> list[dict]:
