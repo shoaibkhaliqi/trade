@@ -9,8 +9,28 @@ An **experimental research system** evolving populations of trading agents
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** M7 complete (walk-forward + embargo splits, seed-variance sweep,
-experiment history viewer). Next milestone: M8 (agent genome).
+**Status:** M8 complete (agent genome: bounded genes, controlled recorded
+mutation, SQLite lineage). Next milestone: M9 (population).
+
+## Genome Facts (M8)
+
+- 8 consequential genes in `evolution/genome.py` GENE_SPECS: behavioral
+  (position_size_pct 5-50, stop_loss_pct 0.5-8, take_profit_pct 0.75-15,
+  cooldown_bars 0-24 int, max_trades_per_day 2-80 int) + learning
+  (learning_rate 1e-4..3e-3 LOG-SCALE, ent_coef 0..0.03, gamma 0.90..0.999).
+  Every gene binds real behavior - no cosmetic genes allowed.
+- Mutation: per-gene Bernoulli(rate) then gaussian; sigma = intensity*span
+  (log-space sigma for learning_rate => multiplicative moves); clamped to
+  bounds; integer genes round. Child carries MutationRecord(gene, old, new,
+  sigma) tuple + parent_id + generation.
+- max_drawdown_pct (kill-switch) is NOT a gene - protocol constant; evolution
+  must never breed its way out of the emergency brake (test-pinned).
+- Persistence: `genomes` table + `lineage_of()` parent walk (tracker.py);
+  `training.risk_config_from_genome` overlays genes onto yaml RiskConfig;
+  `ppo_kwargs_from_genome` wires learning genes into PPO.
+- Import-cycle lesson: `Action` moved to leaf module `darwin/actions.py`;
+  execution and environment both import it - cycle structurally impossible.
+
 
 ## Validation Facts (M7)
 

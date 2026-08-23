@@ -27,21 +27,14 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from enum import StrEnum
 
 import numpy as np
 import pandas as pd
 
+from darwin.actions import Action
 from darwin.data.schema import OHLCV_COLUMNS, TIMESTAMP_COL
 
 MIN_QTY = 1e-8
-
-
-class Action(StrEnum):
-    HOLD = "hold"
-    LONG = "long"
-    SHORT = "short"
-    CLOSE = "close"
 
 
 @dataclass(frozen=True)

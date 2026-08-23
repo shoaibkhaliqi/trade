@@ -34,7 +34,15 @@ Market Data → Feature Engine → Simulator ← Agent → Risk Manager → Exec
 | M5 | Single AI agent        | ✅     |
 | M6 | Risk engine            | ✅     |
 | M7 | Proper validation      | ✅     |
-| M8+| Evolution machinery    | ⬜     |
+| M8 | Agent genome           | ✅     |
+| M9 | Population             | ⬜     |
+| M10 | Fitness               | ⬜     |
+| M11 | Death                 | ⬜     |
+| M12 | Reproduction          | ⬜     |
+| M13 | Mutation policy       | ⬜     |
+| M14 | Generations loop      | ⬜     |
+| M15 | Lineage tools         | ⬜     |
+| M16+ | Regimes → live       | ⬜     |
 
 ## Setup
 

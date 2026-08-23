@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from stable_baselines3 import PPO
@@ -22,6 +23,7 @@ from darwin.data.storage import DataStorage
 from darwin.environment.env import TradingEnv
 from darwin.environment.simulator import SimulatorConfig
 from darwin.evaluation.metrics import MetricsReport
+from darwin.evolution.genome import Genome
 from darwin.execution.risk import RiskConfig, RiskManager
 
 
@@ -55,6 +57,35 @@ def load_frames(config_name: str, timeframe: str):
     return cfg, symbol, ohlcv, feats
 
 
+def risk_config_from_genome(base: RiskConfig, genome: Genome | None) -> RiskConfig:
+    """Overlay a genome's behavioral genes onto the yaml risk baseline."""
+    if genome is None:
+        return base
+    return RiskConfig(
+        max_position_size_pct=base.max_position_size_pct,
+        max_leverage=base.max_leverage,
+        max_risk_per_trade_pct=base.max_risk_per_trade_pct,
+        stop_loss_pct=genome["stop_loss_pct"],
+        take_profit_pct=genome["take_profit_pct"],
+        max_daily_loss_pct=base.max_daily_loss_pct,
+        # the kill-switch stays a PROTOCOL constant: evolution must never be
+        # able to breed its way out of the emergency brake
+        max_drawdown_pct=base.max_drawdown_pct,
+        cooldown_bars=int(genome["cooldown_bars"]),
+        max_trades_per_day=int(genome["max_trades_per_day"]),
+    )
+
+
+def ppo_kwargs_from_genome(genome: Genome | None) -> dict[str, Any]:
+    if genome is None:
+        return {}
+    return {
+        "learning_rate": genome["learning_rate"],
+        "ent_coef": genome["ent_coef"],
+        "gamma": genome["gamma"],
+    }
+
+
 def train_and_evaluate(
     *,
     seed: int,
@@ -68,15 +99,32 @@ def train_and_evaluate(
     timesteps: int,
     eval_window: int = 3_000,
     out_dir: str = "experiments/runs",
+    genome: Genome | None = None,
 ) -> tuple[str, MetricsReport]:
-    """Train on [0, train_end), validate near VAL tail, score once on TEST."""
+    """Train on [0, train_end), validate near VAL tail, score once on TEST.
+
+    When ``genome`` is provided it overrides stop/TP/cooldown/trade-cap in the
+    risk layer and PPO learning genes; entry sizing uses its position gene.
+    """
+    effective_risk = risk_config_from_genome(risk_cfg, genome)
+    episode_sim_cfg = sim_cfg
+    if genome is not None:
+        episode_sim_cfg = SimulatorConfig(
+            initial_capital=sim_cfg.initial_capital,
+            taker_fee_pct=sim_cfg.taker_fee_pct,
+            slippage_pct=sim_cfg.slippage_pct,
+            position_size_pct=min(sim_cfg.position_size_pct,
+                                  genome["position_size_pct"]),
+            qty_decimals=sim_cfg.qty_decimals,
+            close_at_end=sim_cfg.close_at_end,
+        )
 
     def make_train() -> TradingEnv:
         return TradingEnv(
             ohlcv.iloc[:train_end].reset_index(drop=True),
             feats.iloc[:train_end].reset_index(drop=True),
-            config=sim_cfg,
-            risk=RiskManager(risk_cfg),
+            config=episode_sim_cfg,
+            risk=RiskManager(effective_risk),
         )
 
     def make_val_quick() -> TradingEnv:
@@ -84,8 +132,8 @@ def train_and_evaluate(
         return TradingEnv(
             ohlcv.iloc[lo:val_end].reset_index(drop=True),
             feats.iloc[lo:val_end].reset_index(drop=True),
-            config=sim_cfg,
-            risk=RiskManager(risk_cfg),
+            config=episode_sim_cfg,
+            risk=RiskManager(effective_risk),
         )
 
     model = PPO(
@@ -96,6 +144,7 @@ def train_and_evaluate(
         verbose=0,
         n_steps=2048,
         batch_size=256,
+        **ppo_kwargs_from_genome(genome),
     )
     callback = EvalCallback(
         make_val_quick(),
@@ -108,13 +157,16 @@ def train_and_evaluate(
 
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     model_path = f"{out_dir}/ppo_mlp_seed{seed}_t{timesteps}"
+    if genome is not None and genome.genome_id:
+        model_path += f"_g{genome.genome_id}"
     model.save(model_path)
 
     test_candles = ohlcv.iloc[val_end:].reset_index(drop=True)
     test_feats = feats.iloc[val_end:].reset_index(drop=True)
     report = evaluate_agent_on_test(
         model_path, test_candles, test_feats,
-        sim_cfg=sim_cfg, risk_cfg=risk_cfg, seed=seed, timeframe=timeframe,
+        sim_cfg=episode_sim_cfg, risk_cfg=effective_risk,
+        seed=seed, timeframe=timeframe,
     )
     return f"{model_path}.zip", report
 

@@ -13,7 +13,7 @@ Design contracts:
 
 The manager is deliberately stateless about accounting - it reads a
 RiskContext snapshot each decision and keeps only policy state (day buckets,
-latch, position-transition memory).
+latch).
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from datetime import date
 
 import pandas as pd
 
-from darwin.environment.simulator import Action
+from darwin.actions import Action
 
 
 @dataclass(frozen=True)
@@ -98,7 +98,10 @@ class RiskManager:
         self._day_start_equity: float | None = None
         self._trades_at_day_start = 0
 
-    # ------------------------------------------------------------------
+    @property
+    def killed(self) -> bool:
+        return self._killed
+
     def _rollover_if_new_day(self, ctx: RiskContext) -> None:
         today = ctx.timestamp.date()
         if today != self._day:
@@ -162,7 +165,6 @@ class RiskManager:
             )
         return max(cap, 0.0)
 
-    # ------------------------------------------------------------------
     def apply(
         self,
         proposed: Action,
@@ -228,7 +230,3 @@ class RiskManager:
             return proposed, size_pct
 
         return proposed, None
-
-    @property
-    def killed(self) -> bool:
-        return self._killed
