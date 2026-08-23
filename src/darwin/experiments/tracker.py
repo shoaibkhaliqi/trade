@@ -14,6 +14,8 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+from darwin.evolution.survival import STATUS_DEAD
+
 DEFAULT_DB = Path("experiments/metadata.sqlite")
 
 _SCHEMA = """
@@ -40,6 +42,14 @@ CREATE TABLE IF NOT EXISTS agents (
     model_path TEXT,
     metrics_json TEXT,
     created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS deaths (
+    death_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    fitness REAL,
+    max_drawdown REAL,
+    recorded_at TEXT NOT NULL
 );
 """
 
@@ -153,6 +163,62 @@ def update_agent_result(
             (json.dumps(metrics, sort_keys=True, default=str), model_path, status, agent_id),
         )
         conn.commit()
+
+
+def mark_agent_status(
+    agent_id: str,
+    status: str,
+    *,
+    reason: str | None = None,
+    fitness: float | None = None,
+    max_drawdown: float | None = None,
+    db_path: Path | str = DEFAULT_DB,
+) -> None:
+    """Set an agent's status; deaths additionally receive a certificate row.
+
+    History is NEVER deleted: the agents row keeps its metrics; the deaths
+    table only ADDS the cause-of-death record.
+    """
+    path = Path(db_path)
+    with sqlite3.connect(path) as conn:
+        conn.executescript(_SCHEMA)
+        conn.execute(
+            "UPDATE agents SET status = ? WHERE agent_id = ?",
+            (status, agent_id),
+        )
+        if status == STATUS_DEAD and reason is not None:
+            conn.execute(
+                "INSERT INTO deaths (agent_id, reason, fitness, max_drawdown, recorded_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    agent_id,
+                    reason,
+                    fitness,
+                    max_drawdown,
+                    datetime.now(UTC).isoformat(timespec="seconds"),
+                ),
+            )
+        conn.commit()
+
+
+def get_deaths(db_path: Path | str = DEFAULT_DB) -> list[dict]:
+    """All death certificates, oldest first."""
+    with sqlite3.connect(Path(db_path)) as conn:
+        conn.executescript(_SCHEMA)
+        rows = conn.execute(
+            "SELECT agent_id, reason, fitness, max_drawdown, recorded_at "
+            "FROM deaths ORDER BY death_id"
+        ).fetchall()
+    return [
+        {
+            "agent_id": r[0],
+            "reason": r[1],
+            "fitness": r[2],
+            "max_drawdown": r[3],
+            "recorded_at": r[4],
+        }
+        for r in rows
+    ]
 
 
 def get_agents(db_path: Path | str = DEFAULT_DB, status: str | None = None) -> list[dict]:

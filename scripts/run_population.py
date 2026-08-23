@@ -16,8 +16,13 @@ from darwin.environment.simulator import TradingSimulator
 from darwin.evaluation.metrics import format_header, format_row
 from darwin.evolution.fitness import compute_fitness, preset
 from darwin.evolution.population import Population
+from darwin.evolution.survival import SurvivalConfig, evaluate_survival
 from darwin.execution.risk import RiskConfig
-from darwin.experiments.tracker import get_agents, record_experiment
+from darwin.experiments.tracker import (
+    get_agents,
+    mark_agent_status,
+    record_experiment,
+)
 from darwin.experiments.training import (
     git_commit,
     load_frames,
@@ -60,6 +65,7 @@ def main() -> int:
         bh.equity_curve["equity"].iloc[-1] / bh.equity_curve["equity"].iloc[0] - 1.0
     )
     fcfg = preset(args.fitness, baseline_return=baseline)
+    survival_cfg = SurvivalConfig()
     print(f"fitness={args.fitness} | buy&hold baseline on score window: {baseline:+.2%}")
 
     pop = Population(size=args.size)
@@ -90,17 +96,24 @@ def main() -> int:
             genome=agent.genome,
             score_window_bars=args.score_window,
         )
-        pop.record_result(
+        metrics = vars(report)
+        metrics["fitness"] = compute_fitness(
+            {**metrics, "initial_capital_proxy": sim_cfg.initial_capital}, fcfg
+        ).total
+        verdict = evaluate_survival(metrics, metrics["fitness"], survival_cfg)
+        pop.record_result(agent.agent_id, metrics=metrics, model_path=model_path)
+        mark_agent_status(
             agent.agent_id,
-            metrics={**vars(report), "fitness": compute_fitness(
-                {**vars(report), "initial_capital_proxy": sim_cfg.initial_capital},
-                fcfg,
-            ).total},
-            model_path=model_path,
+            verdict.status,
+            reason="; ".join(verdict.reasons) if verdict.reasons else None,
+            fitness=metrics["fitness"],
+            max_drawdown=report.max_drawdown,
         )
+        symbol_map = {"alive": "+", "weak": "~", "dead": "x"}
         print(f"[{i:>3}/{len(agents)}] {agent.agent_id} "
               f"ret={report.total_return:+7.2%} dd={report.max_drawdown:>7.2%} "
               f"sharpe={report.sharpe:>7.3f} trades={report.n_trades:>4d} "
+              f"fit={metrics['fitness']:+7.3f} [{symbol_map[verdict.status]}] "
               f"({time.time() - t0:.0f}s)")
 
     # ------------------------------------------------------------------
@@ -111,11 +124,12 @@ def main() -> int:
     rows.sort(key=lambda r: r["metrics"]["fitness"], reverse=True)
 
     print(f"\n=== LEADERBOARD (by fitness: {args.fitness}) ===")
-    print(format_header() + "     fitness")
+    print(format_header() + "     fitness  status")
     for r in rows:
         m = r["metrics"]
         report = type("R", (), m)()  # MetricsReport-like shim for formatting
-        print(format_row(r["agent_id"][-8:], report) + f"  {m['fitness']:+8.3f}")
+        print(format_row(r["agent_id"][-8:], report)
+              + f"  {m['fitness']:+8.3f}  {r['status']:>5}")
 
     rets = np.array([r["metrics"]["total_return"] for r in rows])
     print(f"\nspread: mean {rets.mean():+.2%} | std {rets.std():.2%} | "

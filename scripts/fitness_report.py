@@ -26,6 +26,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--score-window", type=int, default=5_000)
     parser.add_argument("--train-frac", type=float, default=0.70)
     parser.add_argument("--db", default="experiments/metadata.sqlite")
+    parser.add_argument("--apply", action="store_true",
+                        help="persist survival verdicts to the roster")
     return parser.parse_args()
 
 
@@ -68,6 +70,35 @@ def main() -> int:
                   f"{m['max_drawdown']:>9.2%}{fit:>+9.3f}")
         print()
 
+    # ------------------------------------------------------------------
+    # survival audit under the spec compass (+ default survival config)
+    # ------------------------------------------------------------------
+    from darwin.evolution.survival import SurvivalConfig, evaluate_survival
+
+    spec_cfg = preset("spec", baseline_return=baseline_return)
+    surv_cfg = SurvivalConfig()
+    print("=== SURVIVAL AUDIT (spec compass, default thresholds) ===")
+    for a in agents:
+        m = dict(a["metrics"])
+        m.setdefault("initial_capital_proxy", 1000.0)
+        fit = compute_fitness(m, spec_cfg).total
+        verdict = evaluate_survival(m, fit, surv_cfg)
+        reasons = "; ".join(verdict.reasons) if verdict.reasons else "-"
+        print(f"{a['agent_id'][-8:]:<12} {verdict.status:>5}  {reasons}")
+    if args.apply:
+        from darwin.experiments.tracker import mark_agent_status
+
+        for a in agents:
+            m = dict(a["metrics"])
+            m.setdefault("initial_capital_proxy", 1000.0)
+            fit = compute_fitness(m, spec_cfg).total
+            verdict = evaluate_survival(m, fit, surv_cfg)
+            mark_agent_status(
+                a["agent_id"], verdict.status,
+                reason="; ".join(verdict.reasons) if verdict.reasons else None,
+                fitness=fit, max_drawdown=m["max_drawdown"], db_path=args.db,
+            )
+        print("\nverdicts persisted to the roster (--apply)")
     return 0
 
 

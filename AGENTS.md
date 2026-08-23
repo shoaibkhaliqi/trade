@@ -9,9 +9,27 @@ An **experimental research system** evolving populations of trading agents
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** M10 complete (fitness functions: 6-term spec formula, presets,
-baseline-relative anti-paralysis scoring, population integration). Next
-milestone: M11 (death & survival states).
+**Status:** M11 complete (survival states, death certificates, roster integration).
+Next milestone: M12 (reproduction & selection).
+
+## Survival Facts (M11)
+
+- `evolution/survival.py`: `evaluate_survival(metrics, fitness_total,
+  SurvivalConfig)` -> Verdict(status, reasons). Ordered checks: DEAD
+  (dd>=0.20 | fitness<=-2.0 | opt-in paralysis) > WEAK (dd>=0.10 |
+  fitness<=-0.5) > ALIVE. Thresholds inclusive; reasons machine-readable.
+- Death is a STATUS, never a deletion: the agents row keeps its full metrics
+  history; `deaths` table adds a certificate (reason, fitness, dd, timestamp)
+  via `tracker.mark_agent_status`. `get_agents(status=...)` filters the
+  active roster; `get_deaths()` lists certificates.
+- Default policy: paralysis (0 trades) is WEAK, not DEAD - the fitness
+  compass already taxes it via baseline-relative return;
+  `paralysis_is_death=True` escalates for harsh regimes (visible config).
+- run_population prints per-agent verdicts (+/~/x) and persists them;
+  fitness_report --apply re-audits stored rosters and writes verdicts.
+- First real audit (M9 8-agent roster): 1 alive / 6 weak / 1 dead
+  (2026-002: fitness -2.07 <= death floor -2.0).
+
 
 ## Fitness Facts (M10)
 
