@@ -388,6 +388,108 @@ class VwapFlipStrategy:
         return actions
 
 
+class T3Strategy:
+    """Tillson T3 moving average strategies.
+
+    T3 = c1*e6 + c2*e5 + c3*e4 + c4*e3, where e1..e6 are cascaded EMAs
+    and the coefficients are determined by the volume factor (default 0.7).
+
+    Three modes:
+    - slope : LONG when T3 rising + price above, SHORT when falling + below
+    - cross : fast T3 crossing slow T3
+    - bounce: price pulls back to T3 in trend direction then bounces
+    """
+
+    def __init__(
+        self,
+        mode: str = "slope",
+        period: int = 14,
+        volume_factor: float = 0.7,
+        fast_period: int = 8,
+        slow_period: int = 21,
+        slope_lookback: int = 3,
+        min_dist_pct: float = 0.0,
+    ) -> None:
+        self.mode = mode
+        self.period = period
+        self.volume_factor = volume_factor
+        self.fast_period = fast_period
+        self.slow_period = slow_period
+        self.slope_lookback = slope_lookback
+        self.min_dist_pct = min_dist_pct
+        self.name = f"t3_{mode}"
+
+    @staticmethod
+    def t3(close: pd.Series, period: int, volume_factor: float) -> pd.Series:
+        e1 = close.ewm(span=period, adjust=False).mean()
+        e2 = e1.ewm(span=period, adjust=False).mean()
+        e3 = e2.ewm(span=period, adjust=False).mean()
+        e4 = e3.ewm(span=period, adjust=False).mean()
+        e5 = e4.ewm(span=period, adjust=False).mean()
+        e6 = e5.ewm(span=period, adjust=False).mean()
+        a = volume_factor
+        c1 = -(a ** 3)
+        c2 = 3 * a ** 2 + a ** 3
+        c3 = -3 * a - 3 * a ** 2
+        c4 = 1 + 3 * a + a ** 3
+        return c1 * e6 + c2 * e5 + c3 * e4 + c4 * e3
+
+    def generate_actions(self, ohlcv: pd.DataFrame) -> list[Action]:
+        n = len(ohlcv)
+        actions = [Action.HOLD] * n
+        if n < max(self.slow_period, self.period * 3, 50):
+            return actions
+
+        close = ohlcv["close"].astype("float64")
+        t3_fast = self.t3(close, self.period, self.volume_factor)
+        t3_slow = self.t3(close, self.slow_period, self.volume_factor) \
+            if self.mode == "cross" else None
+
+        for t in range(1, n):
+            c = close.iloc[t]
+            if self.mode == "slope":
+                if t < self.slope_lookback:
+                    continue
+                t3_now = t3_fast.iloc[t]
+                t3_prev = t3_fast.iloc[t - self.slope_lookback]
+                rising = t3_now > t3_prev
+                falling = t3_now < t3_prev
+                dist_ok = (self.min_dist_pct == 0
+                           or abs(c / t3_now - 1) >= self.min_dist_pct)
+                if rising and c > t3_now and dist_ok:
+                    actions[t] = Action.LONG
+                elif falling and c < t3_now and dist_ok:
+                    actions[t] = Action.SHORT
+
+            elif self.mode == "cross":
+                if t < self.slow_period:
+                    continue
+                f_now = t3_fast.iloc[t]
+                s_now = t3_slow.iloc[t]
+                f_prev = t3_fast.iloc[t - 1]
+                s_prev = t3_slow.iloc[t - 1]
+                if f_prev <= s_prev and f_now > s_now:
+                    actions[t] = Action.LONG
+                elif f_prev >= s_prev and f_now < s_now:
+                    actions[t] = Action.SHORT
+
+            elif self.mode == "bounce":
+                if t < self.period * 2:
+                    continue
+                t3_now = t3_fast.iloc[t]
+                prev_c = close.iloc[t - 1]
+                prev_t3 = t3_fast.iloc[t - 1]
+                # touched T3 then bounced back in trend direction
+                if (prev_c <= prev_t3 and c > t3_now
+                        and c > prev_c and t3_now > prev_t3):
+                    actions[t] = Action.LONG
+                elif (prev_c >= prev_t3 and c < t3_now
+                      and c < prev_c and t3_now < prev_t3):
+                    actions[t] = Action.SHORT
+
+        return actions
+
+
 def default_benchmarks(seed: int = 42) -> list[Strategy]:
     return [
         BuyAndHoldStrategy(),
