@@ -62,6 +62,20 @@ class BuyAndHoldStrategy:
         return [Action.LONG] * len(ohlcv)
 
 
+class AlwaysShortStrategy:
+    """Target state: short for the entire horizon (mirror of buy_and_hold).
+
+    Exists as a CONTROL: any agent whose performance merely matches this in
+    a falling window has a directional bias, not an edge. The fitness
+    baselines use max(long, short) passive returns for exactly that reason.
+    """
+
+    name = "always_short"
+
+    def generate_actions(self, ohlcv: pd.DataFrame) -> list[Action]:
+        return [Action.SHORT] * len(ohlcv)
+
+
 class RandomTraderStrategy:
     """Seeded noise trader - fully deterministic for a given seed."""
 
@@ -152,6 +166,7 @@ def default_benchmarks(seed: int = 42) -> list[Strategy]:
     """The standard benchmark roster used by scripts and comparisons."""
     return [
         BuyAndHoldStrategy(),
+        AlwaysShortStrategy(),
         RandomTraderStrategy(seed=seed),
         MovingAverageCrossStrategy(),
         RSIMeanReversionStrategy(),

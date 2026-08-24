@@ -11,8 +11,6 @@ import time
 
 import numpy as np
 
-from darwin.agents import BuyAndHoldStrategy
-from darwin.environment.simulator import TradingSimulator
 from darwin.evaluation.metrics import format_header, format_row
 from darwin.evolution.fitness import preset
 from darwin.evolution.population import Population
@@ -55,18 +53,18 @@ def main() -> int:
     sim_cfg = sim_config_from_yaml(cfg)
     risk_cfg = RiskConfig(**cfg["risk"])
 
-    # fitness compass + its baseline: buy&hold on the identical score window
+    # fitness compass + its baseline: best PASSIVE directional strategy on
+    # the identical score window (max of buy&hold and naive short) - the
+    # M17b hardening that kills directional-bias fake edges
     val_end = int(n * (args.train_frac + 0.15))
     window = ohlcv.iloc[val_end : val_end + args.score_window].reset_index(drop=True)
-    bh = TradingSimulator(sim_cfg).run(
-        window, BuyAndHoldStrategy().generate_actions(window)
-    )
-    baseline = float(
-        bh.equity_curve["equity"].iloc[-1] / bh.equity_curve["equity"].iloc[0] - 1.0
-    )
+    from darwin.evolution.baseline import directional_baseline
+
+    baseline, baseline_side = directional_baseline(window, sim_cfg)
     fcfg = preset(args.fitness, baseline_return=baseline)
     survival_cfg = SurvivalConfig()
-    print(f"fitness={args.fitness} | buy&hold baseline on score window: {baseline:+.2%}")
+    print(f"fitness={args.fitness} | passive baseline on score window: "
+          f"{baseline:+.2%} ({baseline_side})")
 
     pop = Population(size=args.size)
     agents = pop.initialize(master_seed=args.master_seed)
