@@ -181,3 +181,108 @@ class DataDownloader:
             else pd.Timestamp("2017-01-01", tz="UTC")  # pre-listing => full history
         )
         return self.fetch(symbol, timeframe, start, end)
+
+    # ------------------------------------------------------------------
+    # derivatives series (linear perps): funding rates + open interest
+    # ------------------------------------------------------------------
+    def fetch_funding_history(
+        self, symbol: str, start: Any, end: Any
+    ) -> pd.DataFrame:
+        """Funding settlements in [start, end]: timestamp (UTC), funding_rate.
+
+        Paginates newest-first like klines: each page's oldest settlement
+        becomes the next page's upper bound.
+        """
+        start_ms = int(_to_utc_timestamp(start).value // 1_000_000)
+        end_ms = int(_to_utc_timestamp(end).value // 1_000_000)
+        rows: list[dict[str, Any]] = []
+        cursor = end_ms
+        for _ in range(self.MAX_PAGES):
+            payload = self._get(
+                "/v5/market/funding/history",
+                {
+                    "category": self.category,
+                    "symbol": symbol.upper(),
+                    "startTime": start_ms,
+                    "endTime": cursor,
+                    "limit": 200,
+                },
+            )
+            page = payload.get("result", {}).get("list", [])
+            if not page:
+                break
+            rows.extend(page)
+            oldest = min(int(r["fundingRateTimestamp"]) for r in page)
+            if oldest <= start_ms:
+                break
+            next_cursor = oldest - 1
+            if next_cursor >= cursor:
+                break
+            cursor = next_cursor
+            if self.sleep_s > 0:
+                time.sleep(self.sleep_s)
+
+        if not rows:
+            return pd.DataFrame({
+                "timestamp": pd.Series(dtype="datetime64[ns, UTC]"),
+                "funding_rate": pd.Series(dtype="float64"),
+            })
+        df = pd.DataFrame({
+            "timestamp": to_canonical_timestamps(
+                pd.to_numeric([r["fundingRateTimestamp"] for r in rows]),
+                unit="ms"),
+            "funding_rate": pd.to_numeric(
+                [r["fundingRate"] for r in rows], errors="coerce"),
+        })
+        return (df.dropna().sort_values("timestamp")
+                  .drop_duplicates(subset="timestamp", keep="first")
+                  .reset_index(drop=True))
+
+    def fetch_open_interest(
+        self, symbol: str, start: Any, end: Any, *, interval: str = "1h"
+    ) -> pd.DataFrame:
+        """Open-interest snapshots in [start, end]: timestamp, open_interest."""
+        start_ms = int(_to_utc_timestamp(start).value // 1_000_000)
+        end_ms = int(_to_utc_timestamp(end).value // 1_000_000)
+        rows: list[dict[str, Any]] = []
+        cursor = end_ms
+        for _ in range(self.MAX_PAGES):
+            payload = self._get(
+                "/v5/market/open-interest",
+                {
+                    "category": self.category,
+                    "symbol": symbol.upper(),
+                    "intervalTime": interval,
+                    "startTime": start_ms,
+                    "endTime": cursor,
+                    "limit": 200,
+                },
+            )
+            page = payload.get("result", {}).get("list", [])
+            if not page:
+                break
+            rows.extend(page)
+            oldest = min(int(r["timestamp"]) for r in page)
+            if oldest <= start_ms:
+                break
+            next_cursor = oldest - 1
+            if next_cursor >= cursor:
+                break
+            cursor = next_cursor
+            if self.sleep_s > 0:
+                time.sleep(self.sleep_s)
+
+        if not rows:
+            return pd.DataFrame({
+                "timestamp": pd.Series(dtype="datetime64[ns, UTC]"),
+                "open_interest": pd.Series(dtype="float64"),
+            })
+        df = pd.DataFrame({
+            "timestamp": to_canonical_timestamps(
+                pd.to_numeric([r["timestamp"] for r in rows]), unit="ms"),
+            "open_interest": pd.to_numeric(
+                [r["openInterest"] for r in rows], errors="coerce"),
+        })
+        return (df.dropna().sort_values("timestamp")
+                  .drop_duplicates(subset="timestamp", keep="first")
+                  .reset_index(drop=True))

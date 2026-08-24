@@ -9,9 +9,32 @@ An **experimental research system** evolving populations of trading agents
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** EH-v4 complete (supervised paradigm: triple-barrier labels, walk-forward
-LightGBM/logistic). NO EDGE after costs; logistic baseline = exactly zero.
-Next: robustness gates (M17), funding/OI features, or paper trading.
+**Status:** W1 complete (funding + OI downloaded full-depth, derivatives features
+built + causality-tested, supervised hunts rerun). Features are genuinely
+informative (top-5 importance) but NO positive edge after costs. The
+information-axis program is now COMPLETE: technical, multi-TF, derivatives
+all tested. Next: M17 robustness gates, paper trading, or new signal domains.
+
+## Derivatives Facts (W1)
+
+- `downloader.fetch_funding_history/fetch_open_interest`: paginated
+  newest-first walks (same pattern as klines), canonical tz-aware frames.
+  Bybit: PAXG funding = 4h cadence (6,371 settlements from listing);
+  OI 1h snapshots full history (38,959). SOL: 5,451 + 40,721.
+  PROBE GOTCHA: an "empty OI history" for 2022 was a pre-listing query
+  window, not an API limitation - check instrument listing dates first.
+- `features/derivatives.py`: merge_derivatives_features - events merged
+  backward on timestamp (a settlement stamped T is public at T); trailing
+  ma/z computed on the EVENT series (past events only), then merged.
+  Adds fnd_rate, fnd_ma3, fnd_z, oi, oi_chg. NaN before first event.
+- Hunt results (PAXG 1h, LGBM calibrated 0.70/0.30): v1 -5.44%/fold ->
+  +derivatives -0.41%/fold (big improvement, 0% positive folds);
+  fnd_z #2, oi #3, oi_chg #5 importance - real uptake, no profit.
+  SOL 1h d1: -0.65%/fold 50%pos, full-run +0.58% (flat).
+  Relaxed thresholds 0.60/0.40: -2.78% (more signals = more churn; 0.70/0.30
+  confirmed as operating point).
+- scripts/download_derivatives.py: funding + OI for any linear symbol.
+
 
 ## Supervised Hunt Facts (EH-v4)
 

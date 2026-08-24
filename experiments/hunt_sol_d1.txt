@@ -1,0 +1,25 @@
+fold 0 probs: mean=0.461 >th_long=0% <th_short=0%
+fold 3 probs: mean=0.632 >th_long=10% <th_short=0%
+
+SOLUSDT 1h | model=lightgbm horizon=16 barriers=+-2.0sigma thresholds=(0.7/0.3) | 4 folds
+passive baseline: (0.12415466589626023, 'always_short')
+ fold            test_start   return       dd  trades long_sig short_sig
+    0      2024-08-30 15:00    0.00%    0.00%       0        0         0
+    1      2025-02-13 07:00    1.45%  -11.92%       0       31         0
+    2      2025-07-29 23:00    6.30%  -11.52%       0       31         5
+    3      2026-01-12 15:00  -10.34%  -12.33%       0      410         0
+
+aggregate: mean -0.65% std 7.00% pos 50% of folds | full-run return +0.58%
+trades per fold: [0, 1, 2, 0]
+behavior: long=29.4% short=1.7% flat=68.9%
+top features (last fold):
+  oi                        198
+  ema_dist_200              174
+  ema_200                   151
+  fnd_z                     139
+  fnd_ma3                   114
+  vol_ma_20                  99
+  ema_100                    98
+  oi_chg                     95
+  vwap_dist                  93
+  atr_14                     92

@@ -1,0 +1,24 @@
+fold 0 probs: mean=0.511 >th_long=0% <th_short=0%
+fold 2 probs: mean=0.543 >th_long=0% <th_short=0%
+
+PAXGUSDT 1h | model=lightgbm horizon=16 barriers=+-2.0sigma thresholds=(0.7/0.3) | 3 folds
+passive baseline: (0.340619285452445, 'buy_and_hold')
+ fold            test_start   return       dd  trades long_sig short_sig
+    0      2025-01-22 16:00    0.00%    0.00%       0        0         0
+    1      2025-07-08 08:00    0.00%    0.00%       0        0         0
+    2      2025-12-22 00:00   -1.23%   -7.18%       0        7         0
+
+aggregate: mean -0.41% std 0.71% pos 0% of folds | full-run return +0.39%
+trades per fold: [0, 0, 1]
+behavior: long=14.0% short=0.0% flat=86.0%
+top features (last fold):
+  ema_dist_200              163
+  fnd_z                     163
+  oi                        154
+  vol_ma_20                 152
+  ema_200                   143
+  oi_chg                    135
+  fnd_ma3                   110
+  rv_20                      99
+  ema_dist_50                84
+  atr_14                     78
