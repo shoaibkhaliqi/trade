@@ -356,6 +356,38 @@ class GoldTrendPullbackStrategy:
         return actions
 
 
+class VwapFlipStrategy:
+    """Buy above session VWAP, sell below. Nothing else."""
+
+    name = "vwap_flip"
+
+    def generate_actions(self, ohlcv: pd.DataFrame) -> list[Action]:
+        n = len(ohlcv)
+        actions = [Action.HOLD] * n
+        if n < 2:
+            return actions
+
+        high = ohlcv["high"].astype("float64")
+        low = ohlcv["low"].astype("float64")
+        close = ohlcv["close"].astype("float64")
+        volume = ohlcv["volume"].astype("float64")
+        tp = (high + low + close) / 3.0
+        session = ohlcv["timestamp"].dt.normalize()
+
+        cum_pv = (tp * volume).groupby(session).cumsum()
+        cum_v = volume.groupby(session).cumsum().replace(0.0, np.nan)
+        vwap = cum_pv / cum_v
+
+        for t in range(1, n):
+            if np.isnan(vwap.iloc[t]):
+                continue
+            if close.iloc[t] > vwap.iloc[t]:
+                actions[t] = Action.LONG
+            elif close.iloc[t] < vwap.iloc[t]:
+                actions[t] = Action.SHORT
+        return actions
+
+
 def default_benchmarks(seed: int = 42) -> list[Strategy]:
     return [
         BuyAndHoldStrategy(),
