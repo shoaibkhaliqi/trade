@@ -9,8 +9,38 @@ An **experimental research system** evolving populations of trading agents
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** M16 complete (regime labeling + per-regime evaluation; exposed the
-always-LONG monoculture). Next milestone: M17 (stress testing).
+**Status:** EH-v2 autonomous edge hunt complete: 1h experiments, verification
+battery, hardened compass. NO EDGE FOUND - and the machinery now makes fake
+edges nearly impossible to miss. Next: M17 stress testing, edge hunt v3
+(see open questions).
+
+## Verification Facts (EH-v2)
+
+- scripts/verify_agent.py: out-of-sample battery per candidate - slices
+  score/tail/full/all, cross-venue via --symbol (auto-builds features),
+  genome-faithful config. SPLIT GOTCHA: val_end MUST match the training
+  pipeline int(n*(train+val)) - a 0.70-only val_end silently included the
+  score window in a "tail" (caught by bar-count sanity).
+- THE FAKE EDGE CASE STUDY (a515000-001): +0.578 fitness on a falling 1h
+  window -> untouched tail -3.65% (PF 0.0) -> cross-venue +2.21% ONLY
+  because that window also fell -> vs naive-short: indistinguishable.
+  Verdict: persistent short bias, zero timing skill. The shaped reward +
+  falling selection window BRED the bias.
+- evolution/baseline.py: directional_baseline(window, sim_cfg) ->
+  (max(b&h, naive-short) return, which side). run_population uses it as THE
+  fitness baseline; AlwaysShortStrategy added to agents + benchmark roster
+  as permanent control. Positive fitness now requires beating the best
+  passive directional expression - falling windows can no longer mint
+  short-bias "edges".
+- Behavior fingerprints (M17a) + naive-strategy controls are the standard
+  verification battery for ANY future candidate: (1) untouched tail,
+  (2) cross-venue, (3) vs best naive directional, (4) behavior fingerprint
+  stability. A candidate passing all four is worth optimizing further;
+  none has yet.
+- 1h > 15m for behavior diversity (6 unique behaviors vs monoculture), but
+  no positive-fitness agent exists under the hardened compass on any tested
+  configuration (15m/1h, 5k-30k steps, shaped/unshaped, 1-2 seeds).
+
 
 ## Regime Facts (M16)
 
