@@ -54,6 +54,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mutation-intensity", type=float, default=0.25)
     parser.add_argument("--immigrants", type=int, default=1)
     parser.add_argument("--intensity-decay", type=float, default=1.0)
+    parser.add_argument("--seeds-per-agent", type=int, default=1)
+    parser.add_argument("--reward-baseline-weight", type=float, default=0.0)
     parser.add_argument("--charts-dir", default="experiments/figures")
     return parser.parse_args()
 
@@ -135,6 +137,8 @@ def main() -> int:
             fitness_cfg=fcfg, survival_cfg=survival_cfg,
             train_end=train_end, val_end=val_end,
             timesteps=args.timesteps, score_window=args.score_window,
+            n_seeds=args.seeds_per_agent,
+            reward_baseline_weight=args.reward_baseline_weight,
         )
 
     started = time.time()

@@ -38,6 +38,25 @@ class AgentSpec:
     generation: int = 0
 
 
+_AGGREGABLE = (
+    "total_return", "max_drawdown", "sharpe", "sortino", "profit_factor",
+    "win_rate", "n_trades", "fees_paid", "avg_trade_net", "exposure",
+    "fitness",
+)
+
+
+def aggregate_seed_metrics(seed_runs: list[dict]) -> dict:
+    """Mean across seed runs for numeric metrics; full per-seed detail kept."""
+    if not seed_runs:
+        msg = "cannot aggregate zero seed runs"
+        raise ValueError(msg)
+    out: dict = {"per_seed": seed_runs}
+    for key in _AGGREGABLE:
+        values = [run[key] for run in seed_runs if run.get(key) is not None]
+        out[key] = sum(values) / len(values) if values else None
+    return out
+
+
 class Population:
     """Creates and tracks a generation-0 roster of agents."""
 
@@ -109,34 +128,47 @@ class Population:
         score_window: int | None = None,
         out_dir: str = "experiments/runs",
         inherit_weights_from: str | None = None,
+        n_seeds: int = 1,
+        reward_baseline_weight: float = 0.0,
     ) -> tuple[Any, dict, Verdict]:
         """Train, score, and record one agent. Returns (report, metrics, verdict).
 
         The single funnel every agent - founder or child - passes through, so
         selection never compares apples to oranges. Behavior fingerprint is
-        folded into the persisted metrics (zero extra compute).
+        folded into the persisted metrics (zero extra compute). With
+        ``n_seeds > 1`` the agent trains under several seeds and metrics are
+        the MEAN across seeds - single-seed luck stops selecting.
         """
-        model_path, report, behavior = train_and_evaluate(
-            seed=agent.seed,
-            ohlcv=ohlcv,
-            feats=feats,
-            timeframe=timeframe,
-            sim_cfg=sim_cfg,
-            risk_cfg=risk_cfg,
-            train_end=train_end,
-            val_end=val_end,
-            timesteps=timesteps,
-            eval_window=eval_window,
-            out_dir=out_dir,
-            genome=agent.genome,
-            score_window_bars=score_window,
-            init_from_model_path=inherit_weights_from,
-        )
-        metrics = vars(report)
-        metrics["fitness"] = compute_fitness(
-            {**metrics, "initial_capital_proxy": sim_cfg.initial_capital},
-            fitness_cfg,
-        ).total
+        seed_runs: list[dict] = []
+        behavior: dict = {}
+        report = None
+        for k in range(max(1, n_seeds)):
+            model_path, seed_report, behavior = train_and_evaluate(
+                seed=agent.seed + k,
+                ohlcv=ohlcv,
+                feats=feats,
+                timeframe=timeframe,
+                sim_cfg=sim_cfg,
+                risk_cfg=risk_cfg,
+                train_end=train_end,
+                val_end=val_end,
+                timesteps=timesteps,
+                eval_window=eval_window,
+                out_dir=out_dir,
+                genome=agent.genome,
+                score_window_bars=score_window,
+                init_from_model_path=inherit_weights_from,
+                reward_baseline_weight=reward_baseline_weight,
+            )
+            m = vars(seed_report)
+            m["fitness"] = compute_fitness(
+                {**m, "initial_capital_proxy": sim_cfg.initial_capital},
+                fitness_cfg,
+            ).total
+            seed_runs.append(m)
+            report = seed_report
+
+        metrics = aggregate_seed_metrics(seed_runs)
         metrics["behavior"] = behavior
         verdict = evaluate_survival(metrics, metrics["fitness"], survival_cfg)
         self.record_result(agent.agent_id, metrics=metrics, model_path=model_path)

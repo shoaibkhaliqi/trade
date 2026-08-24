@@ -40,6 +40,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-frac", type=float, default=0.70)
     parser.add_argument("--eval-window", type=int, default=3_000)
     parser.add_argument("--fitness", default="spec")
+    parser.add_argument("--seeds-per-agent", type=int, default=1)
+    parser.add_argument("--reward-baseline-weight", type=float, default=0.0)
     return parser.parse_args()
 
 
@@ -88,6 +90,8 @@ def main() -> int:
             train_end=train_end, val_end=val_end,
             timesteps=args.timesteps, eval_window=args.eval_window,
             score_window=args.score_window,
+            n_seeds=args.seeds_per_agent,
+            reward_baseline_weight=args.reward_baseline_weight,
         )
         symbol_map = {"alive": "+", "weak": "~", "dead": "x"}
         print(f"[{i:>3}/{len(agents)}] {agent.agent_id} "

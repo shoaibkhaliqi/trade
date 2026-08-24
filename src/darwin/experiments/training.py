@@ -102,6 +102,7 @@ def train_and_evaluate(
     genome: Genome | None = None,
     score_window_bars: int | None = None,
     init_from_model_path: str | None = None,
+    reward_baseline_weight: float = 0.0,
 ) -> tuple[str, MetricsReport, dict]:
     """Train on [0, train_end), validate near VAL tail, score once on TEST.
 
@@ -133,6 +134,7 @@ def train_and_evaluate(
             feats.iloc[:train_end].reset_index(drop=True),
             config=episode_sim_cfg,
             risk=RiskManager(effective_risk),
+            reward_baseline_weight=reward_baseline_weight,
         )
 
     def make_val_quick() -> TradingEnv:
@@ -142,6 +144,7 @@ def train_and_evaluate(
             feats.iloc[lo:val_end].reset_index(drop=True),
             config=episode_sim_cfg,
             risk=RiskManager(effective_risk),
+            reward_baseline_weight=reward_baseline_weight,
         )
 
     learning_kwargs = ppo_kwargs_from_genome(genome)
@@ -191,6 +194,7 @@ def train_and_evaluate(
         model_path, test_candles, test_feats,
         sim_cfg=episode_sim_cfg, risk_cfg=effective_risk,
         seed=seed, timeframe=timeframe,
+        reward_baseline_weight=reward_baseline_weight,
     )
     return f"{model_path}.zip", report, behavior
 
@@ -204,6 +208,7 @@ def evaluate_agent_on_test(
     risk_cfg: RiskConfig,
     seed: int,
     timeframe: str,
+    reward_baseline_weight: float = 0.0,
 ) -> tuple[MetricsReport, dict]:
     """One deterministic pass over TEST - the only scoring that counts.
 
@@ -215,7 +220,8 @@ def evaluate_agent_on_test(
 
     model = PPO.load(model_path, device="cpu")
     env = TradingEnv(test_candles, test_feats, config=sim_cfg,
-                     risk=RiskManager(risk_cfg))
+                     risk=RiskManager(risk_cfg),
+                     reward_baseline_weight=reward_baseline_weight)
     obs, _ = env.reset(seed=seed)
     actions: list[int] = []
     positions: list[float] = []

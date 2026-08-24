@@ -53,6 +53,7 @@ class TradingEnv(gym.Env):
         start_idx: int | None = None,
         end_idx: int | None = None,
         risk: RiskManager | None = None,
+        reward_baseline_weight: float = 0.0,
     ) -> None:
         super().__init__()
         if len(candles) != len(features):
@@ -87,6 +88,14 @@ class TradingEnv(gym.Env):
         # The risk layer is part of the environment, not the agent: any policy
         # trained/evaluated here physically cannot submit an unfiltered action.
         self.risk = risk
+        # Reward shaping (M17b): r = log(eq ratio) - w * log(price ratio).
+        # w=0 reproduces the historical reward exactly; w>0 makes sitting
+        # flat through a move costly INSIDE the reward - the flat attractor's
+        # plateau becomes a slope. Baseline = the window's own close series.
+        self.reward_baseline_weight = float(reward_baseline_weight)
+        closes = self._candles_window["close"].to_numpy(dtype="float64")
+        price_logret = np.diff(np.log(closes), prepend=0.0)
+        self._baseline_logret = price_logret.astype("float64")
         obs_dim = self._feat_rows.shape[1] + N_ACCOUNT_FEATURES
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32
@@ -195,6 +204,8 @@ class TradingEnv(gym.Env):
 
         self._equity_peak = max(self._equity_peak, equity)
         reward = self._log_reward(prev_equity, equity)
+        if self.reward_baseline_weight:
+            reward -= self.reward_baseline_weight * float(self._baseline_logret[idx])
 
         obs = self._observe(info) if not terminated else self._observe_final()
         return obs, reward, terminated, truncated, {
