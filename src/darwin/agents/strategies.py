@@ -622,6 +622,339 @@ class T3SqueezeMomentumStrategy:
         return actions
 
 
+class AnchoredVwapStrategy:
+    """VWAP anchored to the most recent N-bar swing low/high.
+
+    Unlike session VWAP (resets daily), anchored VWAP starts from a
+    significant point and accumulates forward, giving a longer-memory
+    fair-value reference. LONG when price above the anchored VWAP from
+    the swing low, SHORT when below the anchored VWAP from the swing high.
+    Requires price to stay beyond the VWAP for `confirm_bars` to filter noise.
+    """
+
+    name = "anchored_vwap"
+
+    def __init__(self, anchor_period: int = 50, confirm_bars: int = 2) -> None:
+        self.anchor_period = anchor_period
+        self.confirm_bars = confirm_bars
+
+    def generate_actions(self, ohlcv: pd.DataFrame) -> list[Action]:
+        n = len(ohlcv)
+        actions = [Action.HOLD] * n
+        if n < self.anchor_period * 2:
+            return actions
+
+        high = ohlcv["high"].astype("float64").to_numpy()
+        low = ohlcv["low"].astype("float64").to_numpy()
+        close = ohlcv["close"].astype("float64").to_numpy()
+        volume = ohlcv["volume"].astype("float64").to_numpy()
+        tp = (high + low + close) / 3.0
+
+        pos = 0
+        anchor_low_idx = 0
+        anchor_high_idx = 0
+        confirm_count = 0
+        last_direction = 0
+
+        for t in range(self.anchor_period, n):
+            # find most recent swing low/high over anchor_period
+            window = slice(max(0, t - self.anchor_period), t + 1)
+            anchor_low_idx = window.start + int(np.argmin(low[window]))
+            anchor_high_idx = window.start + int(np.argmax(high[window]))
+
+            # anchored VWAP from swing low (bullish reference)
+            if close[t] > low[anchor_low_idx] and anchor_low_idx < t:
+                pv = np.sum(tp[anchor_low_idx:t + 1] * volume[anchor_low_idx:t + 1])
+                v = np.sum(volume[anchor_low_idx:t + 1])
+                avwap_low = pv / v if v > 0 else np.nan
+            else:
+                avwap_low = np.nan
+
+            # anchored VWAP from swing high (bearish reference)
+            if close[t] < high[anchor_high_idx] and anchor_high_idx < t:
+                pv = np.sum(tp[anchor_high_idx:t + 1] * volume[anchor_high_idx:t + 1])
+                v = np.sum(volume[anchor_high_idx:t + 1])
+                avwap_high = pv / v if v > 0 else np.nan
+            else:
+                avwap_high = np.nan
+
+            # signal with confirmation
+            signal = 0
+            if not np.isnan(avwap_low) and close[t] > avwap_low:
+                if last_direction != 1:
+                    confirm_count += 1
+                else:
+                    confirm_count = max(confirm_count, 1)
+                if confirm_count >= self.confirm_bars:
+                    signal = 1
+            elif not np.isnan(avwap_high) and close[t] < avwap_high:
+                if last_direction != -1:
+                    confirm_count += 1
+                else:
+                    confirm_count = max(confirm_count, 1)
+                if confirm_count >= self.confirm_bars:
+                    signal = -1
+            else:
+                confirm_count = 0
+
+            if pos != 0:
+                if (pos > 0 and signal == -1) or (pos < 0 and signal == 1):
+                    actions[t] = Action.CLOSE
+                    pos = 0
+                    last_direction = signal
+                continue
+
+            if signal == 1 and pos == 0:
+                actions[t] = Action.LONG
+                pos = 1
+                last_direction = 1
+                confirm_count = 0
+            elif signal == -1 and pos == 0:
+                actions[t] = Action.SHORT
+                pos = -1
+                last_direction = -1
+                confirm_count = 0
+
+        return actions
+
+
+class UTBotStrategy:
+    """UT Bot: ATR trailing stop system by QuantNomad.
+
+    Tracks an ATR-based trailing stop that ratchets in the trend direction.
+    LONG when price crosses above the trail, SHORT when below.
+    The key_parameter controls sensitivity: lower = more signals.
+    """
+
+    name = "ut_bot"
+
+    def __init__(
+        self,
+        atr_period: int = 10,
+        atr_multiplier: float = 2.0,
+    ) -> None:
+        self.atr_period = atr_period
+        self.atr_multiplier = atr_multiplier
+
+    def generate_actions(self, ohlcv: pd.DataFrame) -> list[Action]:
+        n = len(ohlcv)
+        actions = [Action.HOLD] * n
+        if n < self.atr_period * 2:
+            return actions
+
+        high = ohlcv["high"].astype("float64").to_numpy()
+        low = ohlcv["low"].astype("float64").to_numpy()
+        close = ohlcv["close"].astype("float64").to_numpy()
+
+        prev_close = np.roll(close, 1)
+        prev_close[0] = close[0]
+        tr = np.maximum(high - low,
+                        np.maximum(np.abs(high - prev_close),
+                                   np.abs(low - prev_close)))
+        tr[0] = high[0] - low[0]
+        atr = pd.Series(tr).ewm(alpha=1/self.atr_period, adjust=False,
+                                min_periods=self.atr_period).mean().to_numpy()
+
+        stop_atr = atr * self.atr_multiplier
+        trail = np.full(n, np.nan)
+        direction = np.zeros(n)  # 1=long, -1=short
+
+        for t in range(1, n):
+            if np.isnan(stop_atr[t]):
+                continue
+            if t == 1 or np.isnan(trail[t-1]):
+                trail[t] = close[t] - stop_atr[t]
+                direction[t] = 1
+                continue
+
+            if close[t] > trail[t-1]:
+                trail[t] = max(trail[t-1], close[t] - stop_atr[t])
+                direction[t] = 1
+            elif close[t] < trail[t-1]:
+                trail[t] = min(trail[t-1], close[t] + stop_atr[t])
+                direction[t] = -1
+            else:
+                trail[t] = trail[t-1]
+                direction[t] = direction[t-1]
+
+        pos = 0
+        for t in range(1, n):
+            if np.isnan(direction[t]) or np.isnan(direction[t-1]):
+                continue
+            if pos != 0:
+                if pos > 0 and direction[t] == -1:
+                    actions[t] = Action.CLOSE
+                    pos = 0
+                elif pos < 0 and direction[t] == 1:
+                    actions[t] = Action.CLOSE
+                    pos = 0
+                continue
+            if direction[t] == 1 and direction[t-1] == -1:
+                actions[t] = Action.LONG
+                pos = 1
+            elif direction[t] == -1 and direction[t-1] == 1:
+                actions[t] = Action.SHORT
+                pos = -1
+
+        return actions
+
+
+class SmartMoneyConceptsStrategy:
+    """Simplified Smart Money Concepts (LuxAlgo-style).
+
+    Tracks market structure via swing highs/lows:
+    - BOS (Break of Structure) = trend continuation
+    - CHoCH (Change of Character) = trend reversal
+    After each BOS, identifies the Order Block (last opposite-color candle
+    before the impulse move). Enters when price returns to the OB zone
+    in the trend direction. Exits on CHoCH or OB-wick stop.
+    """
+
+    name = "smc"
+
+    def __init__(
+        self,
+        swing_lookback: int = 5,
+        ob_max_age: int = 50,
+        stop_atr_mult: float = 1.5,
+    ) -> None:
+        self.swing_lookback = swing_lookback
+        self.ob_max_age = ob_max_age
+        self.stop_atr_mult = stop_atr_mult
+
+    def generate_actions(self, ohlcv: pd.DataFrame) -> list[Action]:
+        n = len(ohlcv)
+        actions = [Action.HOLD] * n
+        if n < self.swing_lookback * 4 + 50:
+            return actions
+
+        high = ohlcv["high"].astype("float64").to_numpy()
+        low = ohlcv["low"].astype("float64").to_numpy()
+        close = ohlcv["close"].astype("float64").to_numpy()
+        open_ = ohlcv["open"].astype("float64").to_numpy()
+
+        # ATR for stop distance
+        prev_c = np.roll(close, 1)
+        prev_c[0] = close[0]
+        tr = np.maximum(high - low,
+                        np.maximum(np.abs(high - prev_c),
+                                   np.abs(low - prev_c)))
+        tr[0] = high[0] - low[0]
+        atr = pd.Series(tr).ewm(alpha=1/14, adjust=False, min_periods=14).mean().to_numpy()
+
+        k = self.swing_lookback
+
+        # --- find swing highs and swing lows ---
+        swing_highs = []  # (index, price)
+        swing_lows = []   # (index, price)
+        for t in range(k, n - k):
+            if all(high[t] >= high[t-j] for j in range(1, k+1)) and \
+               all(high[t] >= high[t+j] for j in range(1, k+1)):
+                swing_highs.append((t, high[t]))
+            if all(low[t] <= low[t-j] for j in range(1, k+1)) and \
+               all(low[t] <= low[t+j] for j in range(1, k+1)):
+                swing_lows.append((t, low[t]))
+
+        # --- track market structure + order blocks ---
+        trend = 0  # 0=undefined, 1=bullish, -1=bearish
+        last_sh = None  # last swing high price
+        last_sl = None  # last swing low price
+        ob = None  # active order block: {"top", "bottom", "dir", "bar"}
+        pos = 0
+        stop = 0.0
+
+        # create a lookup for swing points at each bar
+        sh_at_bar = {}  # bar -> price (swing highs confirmed at this bar)
+        sl_at_bar = {}
+        for idx, price in swing_highs:
+            confirm_bar = idx + k  # confirmed k bars later
+            if confirm_bar < n:
+                sh_at_bar[confirm_bar] = price
+        for idx, price in swing_lows:
+            confirm_bar = idx + k
+            if confirm_bar < n:
+                sl_at_bar[confirm_bar] = price
+
+        for t in range(k * 2, n):
+            c = close[t]
+            a = atr[t] if not np.isnan(atr[t]) else 0
+
+            # update market structure
+            if t in sh_at_bar:
+                prev_sh = last_sh
+                last_sh = sh_at_bar[t]
+                if prev_sh is not None and last_sh > prev_sh:
+                    if trend <= 0:
+                        trend = 1  # CHoCH or continuation
+                    else:
+                        trend = 1  # BOS
+                    # find order block: last bearish candle before the move
+                    for j in range(t - 1, max(t - self.ob_max_age, 0), -1):
+                        if close[j] < open_[j]:  # bearish candle
+                            ob = {"top": max(open_[j], close[j]),
+                                  "bottom": low[j], "dir": 1, "bar": t}
+                            break
+                last_sh = last_sh
+
+            if t in sl_at_bar:
+                prev_sl = last_sl
+                last_sl = sl_at_bar[t]
+                if prev_sl is not None and last_sl < prev_sl:
+                    if trend >= 0:
+                        trend = -1  # CHoCH or continuation
+                    else:
+                        trend = -1  # BOS
+                    for j in range(t - 1, max(t - self.ob_max_age, 0), -1):
+                        if close[j] > open_[j]:  # bullish candle
+                            ob = {"top": high[j], "bottom": min(open_[j], close[j]),
+                                  "dir": -1, "bar": t}
+                            break
+                last_sl = last_sl
+
+            # manage open position
+            if pos != 0:
+                exit_now = False
+                if pos > 0:
+                    if trend == -1:  # CHoCH against us
+                        exit_now = True
+                    elif c <= stop:
+                        exit_now = True
+                elif pos < 0:
+                    if trend == 1:
+                        exit_now = True
+                    elif c >= stop:
+                        exit_now = True
+                if exit_now:
+                    actions[t] = Action.CLOSE
+                    pos = 0
+                    ob = None
+                continue
+
+            # entry: price returns to active OB in trend direction
+            if ob is None or trend == 0:
+                continue
+            ob_age = t - ob["bar"]
+            if ob_age > self.ob_max_age or ob_age < 1:
+                continue
+
+            if trend == 1 and ob["dir"] == 1:
+                # bullish OB: price pulled back into the zone
+                if low[t] <= ob["top"] and c > ob["top"]:
+                    actions[t] = Action.LONG
+                    pos = 1
+                    stop = ob["bottom"] - self.stop_atr_mult * a
+                    ob = None
+            elif trend == -1 and ob["dir"] == -1:
+                # bearish OB: price rallied into the zone
+                if high[t] >= ob["bottom"] and c < ob["bottom"]:
+                    actions[t] = Action.SHORT
+                    pos = -1
+                    stop = ob["top"] + self.stop_atr_mult * a
+                    ob = None
+
+        return actions
+
+
 def default_benchmarks(seed: int = 42) -> list[Strategy]:
     return [
         BuyAndHoldStrategy(),
