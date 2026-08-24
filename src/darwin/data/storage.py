@@ -25,8 +25,8 @@ class DataStorage:
     def __init__(self, base_dir: str | Path = "data/processed") -> None:
         self.base_dir = Path(base_dir)
 
-    def path_for(self, symbol: str, timeframe: str) -> Path:
-        return self.base_dir / f"{symbol.upper()}_{timeframe}.parquet"
+    def path_for(self, symbol: str, timeframe: str, suffix: str = "") -> Path:
+        return self.base_dir / f"{symbol.upper()}{suffix}_{timeframe}.parquet"
 
     def save(
         self,
@@ -36,6 +36,7 @@ class DataStorage:
         metadata: dict[str, Any] | None = None,
         *,
         required_columns: list[str] | None = None,
+        suffix: str = "",
     ) -> Path:
         req = OHLCV_COLUMNS if required_columns is None else required_columns
         missing = [c for c in req if c not in df.columns]
@@ -43,7 +44,7 @@ class DataStorage:
             msg = f"refusing to save: missing columns {missing}"
             raise ValueError(msg)
 
-        path = self.path_for(symbol, timeframe)
+        path = self.path_for(symbol, timeframe, suffix)
         path.parent.mkdir(parents=True, exist_ok=True)
 
         meta = {
@@ -67,8 +68,8 @@ class DataStorage:
         pq.write_table(table, path)
         return path
 
-    def load(self, symbol: str, timeframe: str) -> pd.DataFrame:
-        path = self.path_for(symbol, timeframe)
+    def load(self, symbol: str, timeframe: str, suffix: str = "") -> pd.DataFrame:
+        path = self.path_for(symbol, timeframe, suffix)
         if not path.exists():
             msg = f"dataset not found: {path}"
             raise FileNotFoundError(msg)

@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 from gymnasium import spaces
 
+from darwin.data.schema import TIMESTAMP_COL
 from darwin.environment.simulator import (
     Action,
     SimResult,
@@ -30,7 +31,6 @@ from darwin.environment.simulator import (
     TradingSimulator,
 )
 from darwin.execution.risk import RiskContext, RiskManager
-from darwin.features.schema import ALL_FEATURES
 
 N_ACCOUNT_FEATURES = 3
 
@@ -60,7 +60,8 @@ class TradingEnv(gym.Env):
             msg = "candles and features must be row-aligned"
             raise ValueError(msg)
 
-        feats_only = features[list(ALL_FEATURES)]
+        feats_only = features.drop(columns=[TIMESTAMP_COL])
+        self._feature_columns = list(feats_only.columns)
         valid_mask = feats_only.notna().all(axis=1).to_numpy()
         first_valid = int(np.argmax(valid_mask)) if valid_mask.any() else len(feats_only)
         if not valid_mask.any():

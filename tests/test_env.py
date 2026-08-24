@@ -118,7 +118,7 @@ class TestNoLookAhead:
         k = 250
         perturbed = features.copy()
         perturbed.loc[k:, "rsi_14"] = 99.0
-        perturbed.loc[k:, "close"] = 123456.0
+        perturbed.loc[k:, "ema_dist_50"] = 5.0
 
         env_a = TradingEnv(candles, features, start_idx=210, end_idx=260)
         env_b = TradingEnv(candles, perturbed, start_idx=210, end_idx=260)

@@ -38,7 +38,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-frac", type=float, default=0.70)
     parser.add_argument("--eval-window", type=int, default=3_000)
     parser.add_argument("--fitness", default="spec")
+    parser.add_argument("--symbol", default=None,
+                        help="override the config's symbol (features must exist)")
+    parser.add_argument("--features-suffix", default="",
+                        help="load features from {SYMBOL}{suffix}_{tf}.parquet")
     parser.add_argument("--seeds-per-agent", type=int, default=1)
+    parser.add_argument("--policy", default="MlpPolicy",
+                        choices=["MlpPolicy", "MlpLstmPolicy"],
+                        help="MlpLstmPolicy = recurrent agent (sb3-contrib)")
     parser.add_argument("--reward-baseline-weight", type=float, default=0.0)
     return parser.parse_args()
 
@@ -46,6 +53,15 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     cfg, symbol, ohlcv, feats = load_frames(args.config, args.timeframe)
+    if args.symbol and args.symbol != symbol:
+        from darwin.data.storage import DataStorage
+
+        symbol = args.symbol
+        src = DataStorage(cfg["data"]["processed_dir"])
+        dst = DataStorage(cfg["data"]["features_dir"])
+        ohlcv = src.load(symbol, args.timeframe)
+        feats = dst.load(symbol, args.timeframe, args.features_suffix)
+        print(f"symbol override: {symbol}")
     n = len(ohlcv)
     train_end = int(n * args.train_frac)
     val_end = int(n * (args.train_frac + 0.15))
@@ -89,6 +105,7 @@ def main() -> int:
             timesteps=args.timesteps, eval_window=args.eval_window,
             score_window=args.score_window,
             n_seeds=args.seeds_per_agent,
+            policy=args.policy,
             reward_baseline_weight=args.reward_baseline_weight,
         )
         symbol_map = {"alive": "+", "weak": "~", "dead": "x"}

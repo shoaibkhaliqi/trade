@@ -129,6 +129,7 @@ class Population:
         out_dir: str = "experiments/runs",
         inherit_weights_from: str | None = None,
         n_seeds: int = 1,
+        policy: str = "MlpPolicy",
         reward_baseline_weight: float = 0.0,
     ) -> tuple[Any, dict, Verdict]:
         """Train, score, and record one agent. Returns (report, metrics, verdict).
@@ -159,6 +160,7 @@ class Population:
                 score_window_bars=score_window,
                 init_from_model_path=inherit_weights_from,
                 reward_baseline_weight=reward_baseline_weight,
+                policy=policy,
             )
             m = vars(seed_report)
             m["fitness"] = compute_fitness(

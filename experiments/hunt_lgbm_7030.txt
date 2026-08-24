@@ -1,0 +1,120 @@
+fold 0 probs: mean=0.440 >th_long=0% <th_short=4%
+fold 8 probs: mean=0.545 >th_long=1% <th_short=0%
+fold 16 probs: mean=0.527 >th_long=1% <th_short=0%
+fold 24 probs: mean=0.519 >th_long=2% <th_short=0%
+
+PAXGUSDT 15m | model=lightgbm horizon=16 barriers=+-2.0sigma thresholds=(0.7/0.3) | 25 folds
+passive baseline: (0.340619285452445, 'buy_and_hold')
+ fold            test_start   return       dd  trades long_sig short_sig
+    0      2023-01-22 12:15    0.82%   -1.83%       0        4       204
+
+aggregate: mean +0.82% std nan% pos 100% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+    1      2023-03-15 14:15   -1.27%   -1.92%       0        0      1906
+
+aggregate: mean -0.23% std 1.47% pos 50% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+    2      2023-05-06 16:15    1.54%   -0.69%       0        0        30
+
+aggregate: mean +0.36% std 1.46% pos 67% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+    3      2023-06-27 18:15    0.27%   -1.02%       0        0        58
+
+aggregate: mean +0.34% std 1.19% pos 75% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+    4      2023-08-18 20:15    0.33%   -0.78%       0        1       173
+
+aggregate: mean +0.34% std 1.03% pos 80% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+    5      2023-10-09 22:15   -0.39%   -1.41%       0        5       349
+
+aggregate: mean +0.22% std 0.97% pos 67% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+    6      2023-12-01 00:15    0.51%   -1.69%       0       10       218
+
+aggregate: mean +0.26% std 0.89% pos 71% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+    7      2024-01-22 02:15   -1.38%   -2.02%       0        9       386
+
+aggregate: mean +0.05% std 1.01% pos 62% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+    8      2024-03-14 04:15    1.96%   -5.57%       0       58         0
+
+aggregate: mean +0.27% std 1.14% pos 67% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+    9      2024-05-05 06:15   -0.23%   -1.62%       0        0       554
+
+aggregate: mean +0.22% std 1.08% pos 60% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+   10      2024-06-26 08:15   -2.39%   -2.53%       0        4      1370
+
+aggregate: mean -0.02% std 1.29% pos 55% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+   11      2024-08-17 10:15   -1.64%   -2.47%       0        0         0
+
+aggregate: mean -0.16% std 1.32% pos 50% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+   12      2024-10-08 12:15    2.48%   -1.32%       0       35       460
+
+aggregate: mean +0.05% std 1.46% pos 54% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+   13      2024-11-29 14:15    0.43%   -1.02%       0       20         0
+
+aggregate: mean +0.07% std 1.41% pos 57% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+   14      2025-01-20 16:15   -1.45%   -2.39%       0        0        41
+
+aggregate: mean -0.03% std 1.41% pos 53% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+   15      2025-03-13 18:15   -2.40%   -4.90%       0        0         3
+
+aggregate: mean -0.18% std 1.49% pos 50% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+   16      2025-05-04 20:15    0.73%   -2.29%       0       63         0
+
+aggregate: mean -0.12% std 1.46% pos 53% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+   17      2025-06-25 22:15   -0.10%   -1.13%       0       35         0
+
+aggregate: mean -0.12% std 1.41% pos 50% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+   18      2025-08-17 00:15   -4.51%   -4.82%       0       23       132
+
+aggregate: mean -0.35% std 1.70% pos 47% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+   19      2025-10-08 02:15   -0.06%   -4.56%       0       90         0
+
+aggregate: mean -0.34% std 1.66% pos 45% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+   20      2025-11-29 04:15   -2.05%   -2.51%       0        7       143
+
+aggregate: mean -0.42% std 1.66% pos 43% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+   21      2026-01-20 06:15   -1.46%   -4.90%       0       40         0
+
+aggregate: mean -0.47% std 1.63% pos 41% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+   22      2026-03-13 08:15   -2.66%   -4.70%       0       77         0
+
+aggregate: mean -0.56% std 1.66% pos 39% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+   23      2026-05-04 10:15   -2.84%   -3.96%       0        0         0
+
+aggregate: mean -0.66% std 1.69% pos 38% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+   24      2026-06-25 12:15    2.04%   -1.19%       0       76         0
+
+aggregate: mean -0.55% std 1.74% pos 40% of folds | full-run return -12.30%
+trades per fold: [5, 0, 0, 0, 1, 9, 10, 8, 1, 1, 4, 0, 5, 0, 1, 0, 1, 0, 5, 1, 5, 1, 0, 0, 0]
+behavior: long=30.9% short=49.8% flat=19.3%
+top features (last fold):
+  ema_200                   227
+  ema_dist_200              221
+  vol_ma_20                 199
+  rv_20                     171
+  ema_dist_100              149
+  vwap_dist                 143
+  ema_5                     122
+  atr_14                    120
+  ema_100                   116
+  atr_pct                    87

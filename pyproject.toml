@@ -26,6 +26,9 @@ ml = [
     "gymnasium>=0.29",
     "stable-baselines3>=2.3",
     "optuna>=3.6",
+    "sb3-contrib>=2.3",   # RecurrentPPO/LSTM policies (EH-v3)
+    "lightgbm>=4.0",      # supervised probability hunt (EH-v4)
+    "scikit-learn>=1.4",  # logistic baseline + metrics (EH-v4)
 ]
 dev = [
     "pytest>=8.0",

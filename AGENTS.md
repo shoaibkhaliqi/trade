@@ -9,10 +9,35 @@ An **experimental research system** evolving populations of trading agents
 The user is learning while building: every milestone must be explained, tested,
 and confirmed before moving on.
 
-**Status:** EH-v2 autonomous edge hunt complete: 1h experiments, verification
-battery, hardened compass. NO EDGE FOUND - and the machinery now makes fake
-edges nearly impossible to miss. Next: M17 stress testing, edge hunt v3
-(see open questions).
+**Status:** EH-v4 complete (supervised paradigm: triple-barrier labels, walk-forward
+LightGBM/logistic). NO EDGE after costs; logistic baseline = exactly zero.
+Next: robustness gates (M17), funding/OI features, or paper trading.
+
+## Supervised Hunt Facts (EH-v4)
+
+- `features/labels.py`: triple_barrier_labels - vol-scaled barriers
+  (close_t*exp(+-k*sigma_t), sigma = TRAILING rolling std, knowable at t),
+  horizon timeout labeled by sign, NaN tail = last horizon bars, NaN warmup.
+  Labels look forward BY DESIGN (targets, never features).
+- `features/multi_timeframe.py`: merge_timeframe_features - htf features
+  available at open+interval (a 1h bar stamped 12:00 is usable by 15m bars
+  at 13:00, NEVER 12:00). Boundary + perturbation tests pin causality.
+  MT features did NOT help LightGBM here (-0.46% vs -0.23%/fold).
+- `scripts/supervised_hunt.py`: walk-forward retrain per fold (seconds!),
+  threshold decision rule -> OUR simulator/risk arena. Calibration is
+  everything: unconstrained GBDT outputs near-0/1 probs -> 80% signal
+  coverage -> -6.18%/fold churn; regularized (leaves 15, min_child 500)
+  calibrates to ~0.5 mean -> selective signals -> -0.23%/fold.
+- EH-v4 sweep (PAXG, 25 folds, thresholds 0.70/0.30): LGBM 15m v1
+  -0.23%/fold 50%pos; LGBM 15m mt -0.46% 40%pos; logistic 15m v1
+  **+0.01% 40%pos (full-run +0.38% = flat)**; LGBM 1h -5.44% 0%pos.
+  VERDICT: no extractable edge after costs; the LINEAR baseline matching
+  zero while GBDTs go negative = signal likely absent at this frequency/
+  feature set, not a modeling failure.
+- Deps added: lightgbm, scikit-learn, sb3-contrib (all in [ml] extra).
+- Paradigm value: 25-fold experiments in ~60s vs 15min RL populations -
+  the iteration loop for feature/label/threshold research is now 50x faster.
+
 
 ## Verification Facts (EH-v2)
 

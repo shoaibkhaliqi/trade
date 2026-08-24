@@ -103,6 +103,7 @@ def train_and_evaluate(
     score_window_bars: int | None = None,
     init_from_model_path: str | None = None,
     reward_baseline_weight: float = 0.0,
+    policy: str = "MlpPolicy",
 ) -> tuple[str, MetricsReport, dict]:
     """Train on [0, train_end), validate near VAL tail, score once on TEST.
 
@@ -114,6 +115,8 @@ def train_and_evaluate(
     test rows (population-scale scoring); None means the full test slice.
     ``init_from_model_path`` continues training from a parent's weights
     (inheritance of knowledge) instead of starting from random policy init.
+    ``policy="MlpLstmPolicy"`` trains a recurrent agent (sb3-contrib
+    RecurrentPPO) instead of the feed-forward MLP.
     """
     effective_risk = risk_config_from_genome(risk_cfg, genome)
     episode_sim_cfg = sim_cfg
@@ -155,9 +158,23 @@ def train_and_evaluate(
         model.set_env(DummyVecEnv([make_train]))
         for key, value in learning_kwargs.items():
             setattr(model, key, value)
+    elif policy == "MlpLstmPolicy":
+        # recurrent agent: hidden state carries memory across bars (EH-v3 W3)
+        from sb3_contrib import RecurrentPPO
+
+        model = RecurrentPPO(
+            policy,
+            DummyVecEnv([make_train]),
+            seed=seed,
+            device="cpu",
+            verbose=0,
+            n_steps=2048,
+            batch_size=256,
+            **learning_kwargs,
+        )
     else:
         model = PPO(
-            "MlpPolicy",
+            policy,
             DummyVecEnv([make_train]),
             seed=seed,
             # measured on this stack (M9): CPU 748 fps vs CUDA 303 fps for a
