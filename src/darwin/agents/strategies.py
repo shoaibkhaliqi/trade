@@ -490,6 +490,138 @@ class T3Strategy:
         return actions
 
 
+class T3SqueezeMomentumStrategy:
+    """T3 regime + Squeeze Momentum timing.
+
+    T3 answers: which direction is the trend?
+    Squeeze answers: when to enter? (volatility compression -> expansion)
+
+    LONG: T3 rising + squeeze releases (BB exits KC) + momentum positive
+    SHORT: T3 falling + squeeze releases + momentum negative
+    Exit: momentum crosses against the position, or price crosses T3
+    """
+
+    name = "t3_squeeze"
+
+    def __init__(
+        self,
+        t3_period: int = 14,
+        volume_factor: float = 0.7,
+        squeeze_length: int = 20,
+        bb_mult: float = 2.0,
+        kc_mult: float = 1.5,
+        min_squeeze_bars: int = 6,
+        momentum_lookback: int = 20,
+    ) -> None:
+        self.t3_period = t3_period
+        self.volume_factor = volume_factor
+        self.squeeze_length = squeeze_length
+        self.bb_mult = bb_mult
+        self.kc_mult = kc_mult
+        self.min_squeeze_bars = min_squeeze_bars
+        self.momentum_lookback = momentum_lookback
+
+    @staticmethod
+    def t3(close: pd.Series, period: int, volume_factor: float) -> pd.Series:
+        e1 = close.ewm(span=period, adjust=False).mean()
+        e2 = e1.ewm(span=period, adjust=False).mean()
+        e3 = e2.ewm(span=period, adjust=False).mean()
+        e4 = e3.ewm(span=period, adjust=False).mean()
+        e5 = e4.ewm(span=period, adjust=False).mean()
+        e6 = e5.ewm(span=period, adjust=False).mean()
+        a = volume_factor
+        return (-(a**3) * e6 + (3 * a**2 + a**3) * e5
+                + (-3 * a - 3 * a**2) * e4 + (1 + 3 * a + a**3) * e3)
+
+    def generate_actions(self, ohlcv: pd.DataFrame) -> list[Action]:
+        n = len(ohlcv)
+        actions = [Action.HOLD] * n
+        if n < self.squeeze_length * 3:
+            return actions
+
+        high = ohlcv["high"].astype("float64")
+        low = ohlcv["low"].astype("float64")
+        close = ohlcv["close"].astype("float64")
+        L = self.squeeze_length
+
+        # --- T3 trend ---
+        t3 = self.t3(close, self.t3_period, self.volume_factor)
+        t3_slope = t3.diff(self.momentum_lookback)
+
+        # --- Bollinger Bands ---
+        bb_basis = close.rolling(L).mean()
+        bb_dev = close.rolling(L).std()
+        bb_lower = bb_basis - self.bb_mult * bb_dev
+        bb_upper = bb_basis + self.bb_mult * bb_dev
+
+        # --- Keltner Channels ---
+        prev_close = close.shift(1)
+        tr = pd.concat([high - low, (high - prev_close).abs(),
+                        (low - prev_close).abs()], axis=1).max(axis=1)
+        kc_basis = close.ewm(span=L, adjust=False).mean()
+        kc_range = tr.ewm(span=L, adjust=False).mean()
+        kc_lower = kc_basis - self.kc_mult * kc_range
+        kc_upper = kc_basis + self.kc_mult * kc_range
+
+        # --- Squeeze: BB inside KC ---
+        squeeze_on = (bb_lower >= kc_lower) & (bb_upper <= kc_upper)
+
+        # --- Momentum (LazyBear simplified) ---
+        highest = high.rolling(L).max()
+        lowest = low.rolling(L).min()
+        avg_hl = (highest + lowest) / 2.0
+        avg_sma = close.rolling(L).mean()
+        momentum_raw = close - (avg_hl + avg_sma) / 2.0
+        # smooth with a short EMA to reduce noise
+        momentum = momentum_raw.ewm(span=5, adjust=False).mean()
+
+        # --- Squeeze duration counter ---
+        squeeze_duration = np.zeros(n)
+        for t in range(1, n):
+            if squeeze_on.iloc[t]:
+                squeeze_duration[t] = squeeze_duration[t - 1] + 1
+            else:
+                squeeze_duration[t] = 0
+
+        # --- State machine ---
+        pos = 0
+        for t in range(1, n):
+            if pos != 0:
+                # exit: momentum crosses against, or price crosses T3 against
+                if pos > 0 and (momentum.iloc[t] < 0 or close.iloc[t] < t3.iloc[t]):
+                    actions[t] = Action.CLOSE
+                    pos = 0
+                elif pos < 0 and (momentum.iloc[t] > 0 or close.iloc[t] > t3.iloc[t]):
+                    actions[t] = Action.CLOSE
+                    pos = 0
+                continue
+
+            if t < L * 2 or pd.isna(t3_slope.iloc[t]) or pd.isna(momentum.iloc[t]):
+                continue
+
+            # squeeze release: was on for min bars, now off
+            just_released = (
+                not squeeze_on.iloc[t]
+                and squeeze_duration[t - 1] >= self.min_squeeze_bars
+            )
+            if not just_released:
+                continue
+
+            t3_up = t3_slope.iloc[t] > 0
+            t3_down = t3_slope.iloc[t] < 0
+            mom_up = momentum.iloc[t] > 0
+            mom_down = momentum.iloc[t] < 0
+
+            if t3_up and mom_up:
+                actions[t] = Action.LONG
+                pos = 1
+            elif t3_down and mom_down:
+                actions[t] = Action.SHORT
+                pos = -1
+
+        return actions
+
+
 def default_benchmarks(seed: int = 42) -> list[Strategy]:
     return [
         BuyAndHoldStrategy(),
