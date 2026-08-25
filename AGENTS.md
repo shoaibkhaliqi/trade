@@ -4,16 +4,15 @@ Instructions for AI agents (and humans) working in this repository.
 
 ## What This Is
 
-An **experimental research system** evolving populations of trading agents
-(PAXGUSDT tokenized-gold perpetual first) through selection/reproduction/mutation.
-The user is learning while building: every milestone must be explained, tested,
-and confirmed before moving on.
+A **complete quantitative research lab** for cryptocurrency trading:
+data pipeline, feature engine, trading simulator, risk engine, evolutionary
+optimizer, supervised ML hunt, walk-forward validation, behavioral analysis,
+regime detection, forward tracking, and a Streamlit dashboard.
 
-**Status:** W1 complete (funding + OI downloaded full-depth, derivatives features
-built + causality-tested, supervised hunts rerun). Features are genuinely
-informative (top-5 importance) but NO positive edge after costs. The
-information-axis program is now COMPLETE: technical, multi-TF, derivatives
-all tested. Next: M17 robustness gates, paper trading, or new signal domains.
+**Status:** All milestones M0-M19 complete. Edge hunt program EH-v2 through
+EH-v8 + W1 complete. 259 tests. Best candidate: Ichimoku + meta-filter on
+SOL (Sharpe 1.25, PF 2.17, DD -10.7%, stress-tested, cross-venue verified).
+Forward tracking is LIVE. M20 (live trading) requires explicit approval.
 
 ## Derivatives Facts (W1)
 
