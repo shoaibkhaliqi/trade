@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 sys.path.insert(0, "scripts")
 from forward_tracker import generate_and_log, report  # noqa: E402
 
-ASSETS = ["SOLUSDT", "ETHUSDT", "BTCUSDT"]
+ASSETS = ["SOLUSDT", "ETHUSDT", "BTCUSDT", "BNBUSDT"]
 
 
 def main():
