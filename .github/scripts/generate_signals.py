@@ -5,6 +5,7 @@ CryptoCompare (works from datacenter IPs), runs the meta-filter,
 and appends the signal to forward_log.md.
 """
 # ruff: noqa: E702
+# ruff: noqa: E702
 import os
 
 import numpy as np
@@ -20,12 +21,32 @@ HORIZON = 24
 COIN_MAP = {"SOLUSDT": "SOL", "ETHUSDT": "ETH", "BTCUSDT": "BTC"}
 
 
+def fetch_latest_binance(symbol, limit=48):
+    """Try Binance API (largest exchange, usually works from datacenters)."""
+    pair = symbol  # SOLUSDT, ETHUSDT, BTCUSDT
+    url = "https://api.binance.com/api/v3/klines"
+    resp = requests.get(url, params={
+        "symbol": pair, "interval": "1h", "limit": limit}, timeout=15)
+    resp.raise_for_status()
+    rows = resp.json()
+    records = []
+    for r in rows:
+        records.append({
+            "timestamp": pd.Timestamp(r[0], unit="ms", tz="UTC"),
+            "open": float(r[1]), "high": float(r[2]),
+            "low": float(r[3]), "close": float(r[4]),
+            "volume": float(r[5])})
+    df = pd.DataFrame(records)
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+    return df
+
+
 def fetch_latest_cryptocompare(symbol, limit=48):
-    """Fetch latest hourly candles from CryptoCompare (no IP blocks)."""
+    """Fallback: CryptoCompare API."""
     fsym = COIN_MAP.get(symbol, symbol.replace("USDT", ""))
     url = "https://min-api.cryptocompare.com/data/v2/histohour"
     resp = requests.get(url, params={
-        "fsym": fsym, "tsym": "USDT", "limit": limit}, timeout=30)
+        "fsym": fsym, "tsym": "USDT", "limit": limit}, timeout=15)
     data = resp.json()
     if data.get("Response") != "Success":
         msg = f"CryptoCompare error: {data.get('Message', 'unknown')}"
@@ -37,11 +58,50 @@ def fetch_latest_cryptocompare(symbol, limit=48):
             "timestamp": pd.Timestamp(r["time"], unit="s", tz="UTC"),
             "open": float(r["open"]), "high": float(r["high"]),
             "low": float(r["low"]), "close": float(r["close"]),
-            "volume": float(r["volumefrom"]),
-        })
+            "volume": float(r["volumefrom"])})
     df = pd.DataFrame(records)
     df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
     return df
+
+
+def fetch_latest_okx(symbol, limit=48):
+    """Fallback: OKX API."""
+    inst = symbol.replace("USDT", "-USDT")
+    url = "https://www.okx.com/api/v5/market/candles"
+    resp = requests.get(url, params={
+        "instId": inst, "bar": "1H", "limit": limit}, timeout=15)
+    data = resp.json()
+    if data.get("code") != "0":
+        msg = f"OKX error: {data.get('msg', 'unknown')}"
+        raise RuntimeError(msg)
+    rows = data["data"]  # newest first
+    records = []
+    for r in reversed(rows):
+        records.append({
+            "timestamp": pd.Timestamp(int(r[0]), unit="ms", tz="UTC"),
+            "open": float(r[1]), "high": float(r[2]),
+            "low": float(r[3]), "close": float(r[4]),
+            "volume": float(r[5])})
+    df = pd.DataFrame(records)
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+    return df
+
+
+def fetch_live(symbol, limit=48):
+    """Try multiple sources in order. Returns (df, source_name)."""
+    sources = [
+        ("binance", fetch_latest_binance),
+        ("okx", fetch_latest_okx),
+        ("cryptocompare", fetch_latest_cryptocompare),
+    ]
+    for name, fn in sources:
+        try:
+            df = fn(symbol, limit)
+            if len(df) > 10:
+                return df, name
+        except Exception as e:
+            print(f"  {name} failed: {e}")
+    return None, "all sources failed"
 
 
 def compute_features(ohlcv):
@@ -101,7 +161,15 @@ def main():
             continue
 
         hist = pd.read_parquet(data_path)
-        live = fetch_latest_cryptocompare(symbol, 48)
+
+        # try live data, fall back to committed data
+        live, source = fetch_live(symbol, 48)
+        if live is None:
+            # use last 48 bars from committed data as "live" (slightly stale but safe)
+            live = hist.iloc[-48:].copy().reset_index(drop=True)
+            source = "committed data (stale)"
+            lines.append(f"\n### {symbol}\n⚠️ using stale committed data")
+
         live_feats = compute_features(live)
 
         # Ichimoku primary signal on latest live data
@@ -145,7 +213,7 @@ def main():
         bar_time = str(live["timestamp"].iloc[-1])
 
         lines.append(
-            f"\n### {symbol}\n"
+            f"\n### {symbol} (source: {source})\n"
             f"| | |\n|---|---|\n"
             f"| Close | ${close_price:,.2f} |\n"
             f"| Primary | {primary} |\n"
