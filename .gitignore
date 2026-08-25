@@ -28,6 +28,7 @@ data/features/*
 !data/processed/.gitkeep
 !data/features/.gitkeep
 *.parquet
+!assets/data/*.parquet
 *.feather
 *.h5
 
