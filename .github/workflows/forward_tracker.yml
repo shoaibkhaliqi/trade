@@ -1,0 +1,74 @@
+name: Forward Tracker
+
+on:
+  schedule:
+    - cron: "0 * * * *"   # every hour on the hour
+  workflow_dispatch:        # manual trigger button
+
+permissions:
+  contents: write
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install uv && uv pip install --system -e ".[dev]"
+
+      - name: Download historical data
+        run: |
+          python -c "
+          from darwin.data.downloader import DataDownloader
+          from darwin.data.storage import DataStorage
+          dl = DataDownloader(category='linear', sleep_s=0.04)
+          storage = DataStorage('data/processed')
+          for sym in ('SOLUSDT', 'ETHUSDT', 'BTCUSDT'):
+              df = dl.fetch_recent(sym, '1h', None)
+              if not df.empty:
+                  storage.save(df, sym, '1h',
+                      metadata={'source':'bybit','category':'linear'},
+                      required_columns=['timestamp','open','high','low','close','volume'])
+                  print(sym, len(df), 'candles')
+          "
+
+      - name: Build features
+        run: |
+          python -c "
+          from darwin.data.storage import DataStorage
+          from darwin.features.engine import FeatureEngine
+          from darwin.features.schema import ALL_FEATURES
+          src = DataStorage('data/processed')
+          dst = DataStorage('data/features')
+          for sym in ('SOLUSDT', 'ETHUSDT', 'BTCUSDT'):
+              ohlcv = src.load(sym, '1h')
+              feats = FeatureEngine().build_feature_matrix(ohlcv)
+              dst.save(feats, sym, '1h',
+                  metadata={'kind':'features'},
+                  required_columns=['timestamp'] + list(ALL_FEATURES))
+              print(sym, len(feats), 'features')
+          "
+
+      - name: Generate signals
+        run: |
+          echo "## Forward Signals — $(date -u '+%Y-%m-%d %H:%M UTC')" >> forward_log.md
+          for SYMBOL in SOLUSDT ETHUSDT BTCUSDT; do
+            echo "" >> forward_log.md
+            echo "### $SYMBOL" >> forward_log.md
+            python scripts/forward_tracker.py --symbol $SYMBOL >> forward_log.md 2>&1 || true
+          done
+          echo "" >> forward_log.md
+          echo "---" >> forward_log.md
+
+      - name: Commit signals
+        run: |
+          git config user.name "darwin-bot"
+          git config user.email "bot@darwin.lab"
+          git add forward_log.md
+          git diff --cached --quiet || git commit -m "signals: $(date -u '+%Y-%m-%d %H:%M')"
+          git push
