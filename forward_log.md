@@ -489,3 +489,34 @@
 | Bar | 2026-08-25 17:00:00+00:00 |
 
 ---
+
+## Forward Signals — 2026-08-25 18:42 UTC
+
+### SOLUSDT (source: okx)
+| | |
+|---|---|
+| Close | $98.58 |
+| Primary | HOLD |
+| P(win) | 0.508 |
+| **Signal** | **HOLD** |
+| Bar | 2026-08-25 18:00:00+00:00 |
+
+### ETHUSDT (source: okx)
+| | |
+|---|---|
+| Close | $2,467.35 |
+| Primary | HOLD |
+| P(win) | 0.437 |
+| **Signal** | **HOLD** |
+| Bar | 2026-08-25 18:00:00+00:00 |
+
+### BTCUSDT (source: okx)
+| | |
+|---|---|
+| Close | $79,150.00 |
+| Primary | HOLD |
+| P(win) | 0.478 |
+| **Signal** | **HOLD** |
+| Bar | 2026-08-25 18:00:00+00:00 |
+
+---
