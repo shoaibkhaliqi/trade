@@ -172,20 +172,23 @@ def main():
 
         live_feats = compute_features(live)
 
-        # Ichimoku primary signal on latest live data
-        actions = ichimoku_signal(live)
-        primary = actions[-1].upper()
+        # generate Ichimoku signals on HISTORICAL data for meta-model training
+        hist_actions = ichimoku_signal(hist)
 
-        # meta-model: train on historical data
+        # generate Ichimoku signal on LIVE data for current bar
+        live_actions = ichimoku_signal(live)
+        primary = live_actions[-1].upper()
+
+        # meta-model: train on historical signals + labels
         hist_feats = compute_features(hist)
-        signal_bars = [i for i, a in enumerate(actions) if a != "HOLD"]
+        signal_bars = [i for i, a in enumerate(hist_actions) if a != "HOLD"]
         H = HORIZON
         close_np = hist["close"].astype("float64").to_numpy()
         meta_label = np.full(len(hist), np.nan)
         for i in signal_bars:
             if i + H >= len(hist):
                 continue
-            d = 1 if actions[i] == "LONG" else -1
+            d = 1 if hist_actions[i] == "LONG" else -1
             meta_label[i] = 1.0 if (close_np[i + H] - close_np[i]) * d > 0 else 0.0
 
         feature_cols = STABLE + ["trend_ret_96", "vol_96"]
