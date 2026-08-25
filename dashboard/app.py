@@ -104,7 +104,7 @@ if page == "📊 Overview":
     with col3:
         st.metric("Open Positions", len(open_trades))
     with col4:
-        if trades and "pnl_pct" in trades.columns:
+        if not trades.empty and "pnl_pct" in trades.columns:
             pnls = trades["pnl_pct"].dropna()
             if len(pnls) > 0:
                 st.metric("Forward P&L", f"{pnls.sum():+.2%}")
@@ -114,7 +114,7 @@ if page == "📊 Overview":
             st.metric("Forward P&L", "—")
 
     # forward equity curve
-    if trades and "pnl_pct" in trades.columns and len(trades) > 0:
+    if not trades.empty and "pnl_pct" in trades.columns and len(trades) > 0:
         pnls = trades["pnl_pct"].dropna().tolist()
         if pnls:
             equity = [1000.0]
@@ -129,18 +129,18 @@ if page == "📊 Overview":
             st.plotly_chart(fig, use_container_width=True)
 
     # trade table
-    if trades and len(trades) > 0:
+    if not trades.empty and len(trades) > 0:
         st.subheader("Closed Trades")
         display_cols = ["symbol", "direction", "entry_time", "entry_price",
                         "exit_time", "exit_price", "pnl_pct", "status"]
         available = [c for c in display_cols if c in trades.columns]
         st.dataframe(trades[available], use_container_width=True)
 
-    if open_trades and len(open_trades) > 0:
+    if not open_trades.empty and len(open_trades) > 0:
         st.subheader("Open Positions")
         st.dataframe(open_trades, use_container_width=True)
 
-    if not signals or len(signals) == 0:
+    if signals.empty or len(signals) == 0:
         st.info("No forward signals yet. Run the forward tracker to start collecting data.")
         st.code(".venv\\Scripts\\python.exe scripts\\forward_tracker.py --symbol SOLUSDT")
 
@@ -169,7 +169,7 @@ elif page == "📡 Forward Tracker":
 
     st.subheader("Signal History")
     signals = get_forward_signals(symbol_filter if symbol_filter != "All" else None)
-    if signals and len(signals) > 0:
+    if not signals.empty and len(signals) > 0:
         # P(win) over time
         if "p_win" in signals.columns:
             fig = go.Figure()
