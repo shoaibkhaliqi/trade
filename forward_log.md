@@ -5483,3 +5483,34 @@
 | Bar | 2026-09-20 10:00:00+00:00 |
 
 ---
+
+## Forward Signals — 2026-09-20 14:36 UTC
+
+### SOLUSDT (source: binance)
+| | |
+|---|---|
+| Close | $108.33 |
+| Primary | HOLD |
+| P(win) | 0.440 |
+| **Signal** | **HOLD** |
+| Bar | 2026-09-20 14:00:00+00:00 |
+
+### ETHUSDT (source: binance)
+| | |
+|---|---|
+| Close | $2,581.54 |
+| Primary | HOLD |
+| P(win) | 0.371 |
+| **Signal** | **HOLD** |
+| Bar | 2026-09-20 14:00:00+00:00 |
+
+### BTCUSDT (source: binance)
+| | |
+|---|---|
+| Close | $80,600.95 |
+| Primary | HOLD |
+| P(win) | 0.496 |
+| **Signal** | **HOLD** |
+| Bar | 2026-09-20 14:00:00+00:00 |
+
+---
